@@ -7,7 +7,6 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwiQJfU_v_hiL
 const DEFAULT_SLIDE_ID = "1q1MUsZ68LoyRWubLgX9WIkcjBFLq9_8Zze25fv4etcU";
 
 // --- SECURITY UTILS (ENCODING BASE64) ---
-// Kita gunakan Base64 standar untuk "mengemas" password agar karakter spesial (!) aman saat dikirim
 const secureEncode = (str) => {
     try {
         return btoa(str);
@@ -44,16 +43,14 @@ function handleRequest(e) {
     if (!instructorSheet) {
       instructorSheet = doc.insertSheet(INSTRUCTORS_SHEET);
       instructorSheet.appendRow(["Username", "PasswordEncoded", "Role", "Name"]);
-      // ADMIN DEFAULT: Password 'Adminworkshop123!' di-encode Base64 menjadi 'QWRtaW53b3Jrc2hvcDEyMyE='
       instructorSheet.appendRow(["admin", "QWRtaW53b3Jrc2hvcDEyMyE=", "ADMIN", "Super Admin"]);
     }
     
     // --- AUTHENTICATION ---
     if (action === "auth_instructor") {
       const username = params.username.trim().toLowerCase();
-      const encodedPass = params.password; // Client mengirim Base64
+      const encodedPass = params.password; 
 
-      // Failsafe Check (Hardcoded)
       if (username === 'admin' && encodedPass === 'QWRtaW53b3Jrc2hvcDEyMyE=') {
          return jsonResponse({ result: "success", role: "ADMIN", name: "Super Admin", username: "admin" });
       }
@@ -127,7 +124,6 @@ function handleRequest(e) {
       return jsonResponse({ result: "success", users: users, slideId: currentSlideId });
     }
     
-    // ... (Student logic same as before) ...
     if (action === "register") {
         const username = params.username.trim().toLowerCase();
         const data = sheet.getDataRange().getValues();
@@ -204,12 +200,18 @@ const DEFAULT_WORKSHOP_STEPS = [
   { id: 5, title: "Selesai", duration: "10 Menit", icon: "Award", description: "Showcase hasil karya.", content: "Selamat! Anda telah menyelesaikan workshop." }
 ];
 
+// Styles Injection
 const styleSheet = document.createElement("style");
 styleSheet.innerText = `
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
   .animate-fade-in { animation: fadeIn 0.5s ease-out; }
   .animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
+  /* Custom Scrollbar for sleek look */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 `;
 document.head.appendChild(styleSheet);
 
@@ -266,39 +268,19 @@ export default function App() {
   const instructorSlideRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // --- ANTI THEFT & SECURITY ENFORCED ---
+  // --- ANTI THEFT & SECURITY ---
   useEffect(() => {
-    // 1. Prevent Right Click
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      return false;
-    };
-
-    // 2. Prevent Keyboard Shortcuts (F12, Ctrl+Shift+I, etc)
+    const handleContextMenu = (e) => { e.preventDefault(); return false; };
     const handleKeyDown = (e) => {
-        // F12
         if (e.keyCode === 123) { e.preventDefault(); return false; }
-        
-        // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C (Inspect Element)
-        if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
-            e.preventDefault(); return false;
-        }
-        
-        // Ctrl+U (View Source)
+        if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) { e.preventDefault(); return false; }
         if (e.ctrlKey && e.keyCode === 85) { e.preventDefault(); return false; }
-
-        // Esc for fullscreen logic (allowed)
-        if (e.key === 'Escape' && isExpanded) {
-            setIsExpanded(false);
-        }
+        if (e.key === 'Escape' && isExpanded) { setIsExpanded(false); }
     };
-
-    // Attach to document and window to be sure
     document.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keydown', handleKeyDown);
-
     return () => {
         document.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('contextmenu', handleContextMenu);
@@ -320,17 +302,11 @@ export default function App() {
   };
 
   const toggleFullScreen = async (ref) => {
-      if (isExpanded) {
-          setIsExpanded(false);
-          return;
-      }
+      if (isExpanded) { setIsExpanded(false); return; }
       if (!ref.current) return;
       try {
-          if (!document.fullscreenElement) {
-              await ref.current.requestFullscreen();
-          } else {
-              if (document.exitFullscreen) await document.exitFullscreen();
-          }
+          if (!document.fullscreenElement) { await ref.current.requestFullscreen(); } 
+          else { if (document.exitFullscreen) await document.exitFullscreen(); }
       } catch (err) {
           console.warn("Native fullscreen denied, switching to CSS fallback.");
           setIsExpanded(true);
@@ -343,8 +319,6 @@ export default function App() {
           const stored = localStorage.getItem('mock_db_instructors');
           if (stored) return JSON.parse(stored);
           return [
-              // MOCK DATA DISIMPAN SEBAGAI PLAINTEXT
-              // Login akan otomatis encode input sebelum bandingkan
               { username: 'admin', password: 'Adminworkshop123!', role: 'ADMIN', name: 'Super Admin' },
               { username: 'demo', password: 'Instruktur123!', role: 'INSTRUCTOR', name: 'Demo Instruktur' }
           ];
@@ -352,25 +326,16 @@ export default function App() {
       const saveMockDB = (data) => localStorage.setItem('mock_db_instructors', JSON.stringify(data));
       const instructors = getMockDB();
 
-      if (params.action === 'saveMaterials') {
-        localStorage.setItem('mock_materials', params.data);
-        return { result: 'success' };
-      }
-      if (params.action === 'getMaterials') {
-        const stored = localStorage.getItem('mock_materials');
-        return { result: 'success', data: stored ? JSON.parse(stored) : null };
-      }
+      if (params.action === 'saveMaterials') { localStorage.setItem('mock_materials', params.data); return { result: 'success' }; }
+      if (params.action === 'getMaterials') { const stored = localStorage.getItem('mock_materials'); return { result: 'success', data: stored ? JSON.parse(stored) : null }; }
 
       if (params.action === 'auth_instructor') {
-          const encodedPass = params.password; // Client sends Base64
+          const encodedPass = params.password; 
           const user = instructors.find(u => u.username === params.username.toLowerCase());
-          
           if (user) {
-              // Cek 1: Jika DB Plaintext, kita encode dulu DB-nya
               if (secureEncode(user.password) === encodedPass) {
                   return { result: 'success', role: user.role, username: user.username, name: user.name };
               }
-              // Cek 2: Jika DB sudah Base64 (dari save sebelumnya)
               if (user.password === encodedPass) {
                   return { result: 'success', role: user.role, username: user.username, name: user.name };
               }
@@ -407,32 +372,18 @@ export default function App() {
 
   const callAPI = async (params) => {
     if (isOfflineMode) return mockAPICall(params);
-
     setLoading(true);
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000));
-
     try {
       if (!GOOGLE_SCRIPT_URL) { setIsOfflineMode(true); return mockAPICall(params); } 
-      
       const formData = new FormData();
       Object.keys(params).forEach(key => formData.append(key, params[key]));
       if (targetSheetId) formData.append('targetId', targetSheetId);
-
-      const response = await Promise.race([
-          fetch(GOOGLE_SCRIPT_URL, { 
-              method: "POST", 
-              body: formData, 
-              credentials: 'omit', 
-          }), 
-          timeout
-      ]);
-
+      const response = await Promise.race([ fetch(GOOGLE_SCRIPT_URL, { method: "POST", body: formData, credentials: 'omit', }), timeout ]);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
       const text = await response.text();
       if (!text) throw new Error("Empty response");
       return JSON.parse(text);
-      
     } catch (error) {
       console.warn("API Error (Fallback to Offline):", error.message);
       if (!isOfflineMode) { 
@@ -441,9 +392,7 @@ export default function App() {
           return mockAPICall(params);
       }
       return { result: "error", message: "Koneksi Bermasalah." };
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const fetchStudents = async () => { 
@@ -461,30 +410,19 @@ export default function App() {
 
   const fetchMaterials = async () => {
       const res = await callAPI({ action: 'getMaterials' });
-      if (res && res.result === 'success' && res.data) {
-        setMaterials(res.data);
-      } else {
-        setMaterials(DEFAULT_WORKSHOP_STEPS);
-      }
+      if (res && res.result === 'success' && res.data) { setMaterials(res.data); } 
+      else { setMaterials(DEFAULT_WORKSHOP_STEPS); }
   };
 
   const saveMaterials = async () => {
       const res = await callAPI({ action: 'saveMaterials', data: JSON.stringify(materials) });
-      if (res && res.result === 'success') {
-        showNotif("Materi berhasil disimpan!");
-        setShowMaterialEditor(false);
-      } else {
-        showNotif("Gagal menyimpan materi.");
-      }
+      if (res && res.result === 'success') { showNotif("Materi berhasil disimpan!"); setShowMaterialEditor(false); } 
+      else { showNotif("Gagal menyimpan materi."); }
   };
 
-  // --- AUTO LOGIN & INIT ---
   useEffect(() => {
     const savedUser = localStorage.getItem('workshop_user');
-    if (savedUser) { 
-      try { setUserData(JSON.parse(savedUser)); setView('student'); } catch(e){} 
-      fetchMaterials();
-    }
+    if (savedUser) { try { setUserData(JSON.parse(savedUser)); setView('student'); } catch(e){} fetchMaterials(); }
     const savedInstructor = sessionStorage.getItem('workshop_instructor_session');
     if (savedInstructor) { try { setActiveInstructorSession(JSON.parse(savedInstructor)); } catch(e){} }
     const savedLockout = localStorage.getItem('login_lockout_until');
@@ -493,60 +431,30 @@ export default function App() {
     if (savedSheetId) { setTargetSheetId(savedSheetId); setNewTargetSheetId(savedSheetId); }
   }, []);
 
-  // --- HANDLERS ---
   const handleInstructorLogin = async (e) => {
       e.preventDefault();
       setLoginError(""); 
-      
-      if (!instructorUsername || !instructorPass) { 
-          setLoginError("Username dan Password harus diisi."); 
-          return; 
-      }
-
+      if (!instructorUsername || !instructorPass) { setLoginError("Username dan Password harus diisi."); return; }
       if (lockoutTime) { 
-          if (new Date().getTime() < lockoutTime) { 
-              setLoginError(`Akun terkunci karena terlalu banyak percobaan. Tunggu 5 menit.`); 
-              return; 
-          } else { 
-              setLockoutTime(null); 
-              localStorage.removeItem('login_lockout_until'); 
-              setLoginAttempts(0); 
-          }
+          if (new Date().getTime() < lockoutTime) { setLoginError(`Akun terkunci karena terlalu banyak percobaan. Tunggu 5 menit.`); return; } 
+          else { setLockoutTime(null); localStorage.removeItem('login_lockout_until'); setLoginAttempts(0); }
       }
-
-      // ENCODE PASSWORD CLIENT SIDE (BASE64)
       const encodedPassword = secureEncode(instructorPass);
-      
-      const res = await callAPI({ 
-          action: 'auth_instructor', 
-          username: instructorUsername, 
-          password: encodedPassword 
-      });
-
+      const res = await callAPI({ action: 'auth_instructor', username: instructorUsername, password: encodedPassword });
       if (res && res.result === 'success') {
           const session = { username: res.username, role: res.role, name: res.name };
           setActiveInstructorSession(session);
           sessionStorage.setItem('workshop_instructor_session', JSON.stringify(session));
-          
-          setInstructorUsername(""); 
-          setInstructorPass("");     
-          setLoginAttempts(0);
-          
+          setInstructorUsername(""); setInstructorPass(""); setLoginAttempts(0);
           fetchMaterials();
           if (loginTarget === 'dashboard') { setView('instructor_dashboard'); showNotif(`Selamat datang, ${res.name}`); }
           else if (loginTarget === 'settings') { setView('admin_settings'); showNotif('Masuk ke Pengaturan Admin'); }
       } else {
-          const newAttempts = loginAttempts + 1; 
-          setLoginAttempts(newAttempts);
-          
+          const newAttempts = loginAttempts + 1; setLoginAttempts(newAttempts);
           if (newAttempts >= 5) { 
-              const lockout = new Date().getTime() + (5 * 60 * 1000); 
-              setLockoutTime(lockout); 
-              localStorage.setItem('login_lockout_until', lockout); 
+              const lockout = new Date().getTime() + (5 * 60 * 1000); setLockoutTime(lockout); localStorage.setItem('login_lockout_until', lockout); 
               setLoginError('Terlalu banyak percobaan. Akun dikunci 5 menit.'); 
-          } else { 
-              setLoginError(String(res?.message || "Username atau Password salah.")); 
-          }
+          } else { setLoginError(String(res?.message || "Username atau Password salah.")); }
       }
   };
 
@@ -581,22 +489,15 @@ export default function App() {
         const userObj = { userId: res.userId, username: res.username, name: res.name, step: res.step, status: res.status };
         setUserData(userObj);
         if (res.slideId) setCurrentSlideId(res.slideId);
-        fetchMaterials(); 
-        localStorage.setItem('workshop_user', JSON.stringify(userObj));
-        setView('student');
+        fetchMaterials(); localStorage.setItem('workshop_user', JSON.stringify(userObj)); setView('student');
     } else { showNotif(String(res?.message || "Gagal login.")); }
   };
 
   const requestLogout = () => setShowLogoutConfirm(true);
   const confirmLogout = () => {
-      localStorage.removeItem('workshop_user');
-      sessionStorage.removeItem('workshop_instructor_session');
-      setActiveInstructorSession(null);
-      setUserData({ name: '', username: '', userId: '', step: 1, status: 'PENDING' });
-      setAuthInput({ username: '', name: '' });
-      setView('auth');
-      setShowLogoutConfirm(false);
-      setIsOfflineMode(false);
+      localStorage.removeItem('workshop_user'); sessionStorage.removeItem('workshop_instructor_session');
+      setActiveInstructorSession(null); setUserData({ name: '', username: '', userId: '', step: 1, status: 'PENDING' });
+      setAuthInput({ username: '', name: '' }); setView('auth'); setShowLogoutConfirm(false); setIsOfflineMode(false);
   };
 
   const copyScriptToClipboard = () => {
@@ -627,9 +528,8 @@ export default function App() {
       const fetchInstr = async () => {
         const res = await callAPI({ action: 'getAllUsers' });
         if (res && res.result === 'success') {
-          if (Array.isArray(res.users)) {
-              setInstructorData(Array.from(new Map(res.users.map(item => [item.userId, item])).values()));
-          } else { setInstructorData([]); }
+          if (Array.isArray(res.users)) { setInstructorData(Array.from(new Map(res.users.map(item => [item.userId, item])).values())); } 
+          else { setInstructorData([]); }
           if (res.slideId) setCurrentSlideId(res.slideId);
         }
       };
@@ -660,41 +560,34 @@ export default function App() {
   const handleStudentSubmit = async (answer) => { await callAPI({ action: 'submitTask', userId: userData.userId, answer }); setUserData(prev => ({ ...prev, status: 'WAITING_APPROVAL' })); showNotif("Jawaban terkirim."); };
   const handleNextLevel = async () => { const nextStep = userData.step + 1; await callAPI({ action: 'updateStep', userId: userData.userId, step: nextStep }); setUserData(prev => ({ ...prev, step: nextStep, status: 'PENDING' })); setStudentInput(""); };
 
-  const handleUpdateMaterial = (field, value) => {
-    setEditingMaterial(prev => ({ ...prev, [field]: value }));
-  };
-
-  const saveEditingMaterial = () => {
-    const updatedMaterials = materials.map(m => m.id === editingMaterial.id ? editingMaterial : m);
-    setMaterials(updatedMaterials);
-    setEditingMaterial(null);
-  };
+  const handleUpdateMaterial = (field, value) => { setEditingMaterial(prev => ({ ...prev, [field]: value })); };
+  const saveEditingMaterial = () => { const updatedMaterials = materials.map(m => m.id === editingMaterial.id ? editingMaterial : m); setMaterials(updatedMaterials); setEditingMaterial(null); };
 
   // --- RENDERERS ---
 
   if (view === 'recover') {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-                <button onClick={() => { setView('auth'); setRecoveredUser(null); }} className="text-gray-500 mb-4 flex items-center gap-2"><ArrowLeft size={16}/> Kembali</button>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
+            <div className="bg-white/80 backdrop-blur-md p-8 rounded-3xl shadow-2xl w-full max-w-md border border-white/50">
+                <button onClick={() => { setView('auth'); setRecoveredUser(null); }} className="text-gray-500 mb-4 flex items-center gap-2 hover:text-indigo-600 transition"><ArrowLeft size={16}/> Kembali</button>
                 <h2 className="text-2xl font-bold mb-2 text-gray-800">Lupa Username?</h2>
                 {!recoveredUser ? (
-                    <form onSubmit={() => { /* Mock recover implementation for demo */ setRecoveredUser({foundUsername: 'demo', foundName: 'Siswa Demo'}); }} className="space-y-4">
-                        <input type="text" className="w-full p-3 border border-gray-300 rounded-lg" placeholder="Nama Lengkap" value={recoverName} onChange={e => setRecoverName(e.target.value)}/>
+                    <form onSubmit={() => { /* Mock recover */ setRecoveredUser({foundUsername: 'demo', foundName: 'Siswa Demo'}); }} className="space-y-4">
+                        <input type="text" className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white/50 transition" placeholder="Nama Lengkap" value={recoverName} onChange={e => setRecoverName(e.target.value)}/>
                         <button type="button" onClick={async () => {
                              setLoading(true);
                              const res = await callAPI({action: 'recover', name: recoverName});
                              setLoading(false);
                              if(res.result === 'success') setRecoveredUser(res);
                              else showNotif(res.message);
-                        }} disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold">{loading ? "Mencari..." : "Cari Akun Saya"}</button>
+                        }} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 transition transform active:scale-95">{loading ? "Mencari..." : "Cari Akun Saya"}</button>
                     </form>
                 ) : (
-                    <div className="bg-green-50 p-6 rounded-xl border border-green-200 text-center animate-fade-in">
-                        <CheckCircle size={40} className="mx-auto text-green-600 mb-2"/>
+                    <div className="bg-green-50 p-6 rounded-2xl border border-green-200 text-center animate-fade-in">
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle size={32} className="text-green-600"/></div>
                         <p className="text-green-800 font-medium">Akun Ditemukan!</p>
-                        <div className="my-4"><p className="text-xs text-gray-500 uppercase">Username Anda:</p><p className="text-2xl font-bold text-gray-900 tracking-wider font-mono bg-white py-2 rounded border border-green-100">{recoveredUser.foundUsername}</p></div>
-                        <button onClick={() => { setView('auth'); setAuthInput({...authInput, username: recoveredUser.foundUsername}); }} className="w-full bg-green-600 text-white py-2 rounded-lg font-bold">Login Sekarang</button>
+                        <div className="my-6"><p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Username Anda</p><p className="text-3xl font-bold text-gray-900 tracking-wider font-mono bg-white py-3 rounded-xl border border-green-100 shadow-sm select-all">{recoveredUser.foundUsername}</p></div>
+                        <button onClick={() => { setView('auth'); setAuthInput({...authInput, username: recoveredUser.foundUsername}); }} className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-100 transition">Login Sekarang</button>
                     </div>
                 )}
             </div>
@@ -704,24 +597,40 @@ export default function App() {
 
   if (view === 'auth') {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
-        {notification && <div className="fixed top-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl z-50">{notification}</div>}
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md relative">
-          {isOfflineMode && <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-1 rounded-full text-xs font-bold shadow-sm flex items-center gap-1"><WifiOff size={12}/> Mode Demo (Offline)</div>}
-          <div className="text-center mb-6"><Rocket size={48} className="mx-auto text-indigo-600 mb-2" /><h1 className="text-2xl font-bold text-gray-900">App in 90 Mins</h1><p className="text-gray-500">Workshop Interactive Guide</p></div>
-          <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
-              <button onClick={() => setAuthMode('login')} className={`flex-1 py-2 text-sm font-bold rounded-md transition ${authMode === 'login' ? 'bg-white shadow text-indigo-700' : 'text-gray-500'}`}>Masuk</button>
-              <button onClick={() => setAuthMode('register')} className={`flex-1 py-2 text-sm font-bold rounded-md transition ${authMode === 'register' ? 'bg-white shadow text-indigo-700' : 'text-gray-500'}`}>Daftar</button>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex flex-col items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
+        {notification && <div className="fixed top-4 bg-gray-900/90 backdrop-blur text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-fade-in-up border border-gray-700">{notification}</div>}
+        <div className="bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-md relative border border-white/50">
+          {isOfflineMode && <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-1 rounded-full text-xs font-bold shadow-sm flex items-center gap-1 border border-yellow-200"><WifiOff size={12}/> Mode Demo (Offline)</div>}
+          <div className="text-center mb-8">
+              <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-indigo-200 transform rotate-3 hover:rotate-6 transition duration-300">
+                  <Rocket size={40} className="text-white" />
+              </div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">App in 90 Mins</h1>
+              <p className="text-gray-500 font-medium">Workshop Interactive Guide</p>
+          </div>
+          <div className="flex bg-gray-100/80 p-1.5 rounded-2xl mb-6">
+              <button onClick={() => setAuthMode('login')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${authMode === 'login' ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>Masuk</button>
+              <button onClick={() => setAuthMode('register')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 ${authMode === 'register' ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>Daftar</button>
           </div>
           <form onSubmit={handleAuth} className="space-y-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Username Peserta</label><input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="budi99" value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value.replace(/\s/g, '')})}/></div>
-            {authMode === 'register' && (<div className="animate-fade-in"><label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label><input type="text" className="w-full p-3 border border-gray-300 rounded-lg" placeholder="Budi Santoso" value={authInput.name} onChange={e => setAuthInput({...authInput, name: e.target.value})}/></div>)}
-            <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition flex justify-center items-center gap-2">{loading ? <Loader className="animate-spin" size={20}/> : (authMode === 'register' ? "Mulai Workshop" : "Masuk")}</button>
+            <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide ml-1">Username Peserta</label>
+                <input type="text" className="w-full p-4 bg-white border border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition font-medium text-gray-700" placeholder="Contoh: budi99" value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value.replace(/\s/g, '')})}/>
+            </div>
+            {authMode === 'register' && (
+                <div className="animate-fade-in space-y-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide ml-1">Nama Lengkap</label>
+                    <input type="text" className="w-full p-4 bg-white border border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition font-medium text-gray-700" placeholder="Contoh: Budi Santoso" value={authInput.name} onChange={e => setAuthInput({...authInput, name: e.target.value})}/>
+                </div>
+            )}
+            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-4 rounded-xl font-bold shadow-xl shadow-indigo-200 hover:shadow-indigo-300 transition transform active:scale-[0.98] flex justify-center items-center gap-2 mt-4">
+                {loading ? <Loader className="animate-spin" size={20}/> : (authMode === 'register' ? "Mulai Workshop Sekarang" : "Masuk ke Kelas")}
+            </button>
           </form>
-          {authMode === 'login' && (<button onClick={() => setView('recover')} className="block w-full text-center text-xs text-indigo-500 mt-3 hover:underline">Lupa Username?</button>)}
+          {authMode === 'login' && (<button onClick={() => setView('recover')} className="block w-full text-center text-xs font-semibold text-indigo-500 mt-4 hover:text-indigo-700 transition">Lupa Username?</button>)}
           <div className="mt-8 pt-6 border-t border-gray-100 grid grid-cols-2 gap-3">
-             <button onClick={() => { setLoginTarget('dashboard'); setView('instructor_login'); setLoginError(""); }} className="flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:text-indigo-600 py-2 rounded hover:bg-gray-50 transition"><Monitor size={14}/> Login Instruktur</button>
-             <button onClick={() => { setLoginTarget('settings'); setView('instructor_login'); setLoginError(""); }} className="flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:text-indigo-600 py-2 rounded hover:bg-gray-50 transition"><Settings size={14}/> Admin / Pengaturan</button>
+             <button onClick={() => { setLoginTarget('dashboard'); setView('instructor_login'); setLoginError(""); }} className="flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:text-indigo-600 py-3 rounded-xl hover:bg-indigo-50 transition group"><Monitor size={14} className="group-hover:scale-110 transition"/> Login Instruktur</button>
+             <button onClick={() => { setLoginTarget('settings'); setView('instructor_login'); setLoginError(""); }} className="flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:text-indigo-600 py-3 rounded-xl hover:bg-indigo-50 transition group"><Settings size={14} className="group-hover:scale-110 transition"/> Admin / Pengaturan</button>
           </div>
         </div>
       </div>
@@ -732,41 +641,48 @@ export default function App() {
   if (view === 'instructor_login') {
       return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
-            {lockoutTime && <div className="mb-4 bg-red-100 text-red-700 p-2 rounded text-xs flex items-center justify-center gap-2"><AlertTriangle size={14}/> Akun terkunci. Tunggu 5 menit.</div>}
+          <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center border border-gray-100">
+            {lockoutTime && <div className="mb-4 bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-xs font-medium flex items-center justify-center gap-2 animate-bounce"><AlertTriangle size={14}/> Akun terkunci sementara. Tunggu 5 menit.</div>}
             
-            <h2 className="text-xl font-bold mb-1">{loginTarget === 'dashboard' ? 'Login Instruktur' : 'Login Admin'}</h2>
-            <p className="text-xs text-gray-500 mb-6">Masukkan kredensial Anda</p>
+            <div className="mb-6 inline-block p-4 bg-indigo-50 rounded-full"><Lock size={32} className="text-indigo-600"/></div>
+            <h2 className="text-2xl font-bold mb-2 text-gray-900">{loginTarget === 'dashboard' ? 'Login Instruktur' : 'Login Admin'}</h2>
+            <p className="text-sm text-gray-500 mb-8">Silakan masukkan kredensial Anda untuk melanjutkan.</p>
             
-            <form onSubmit={handleInstructorLogin}>
-                <input required type="text" className="w-full p-3 border border-gray-300 rounded-lg mb-4" placeholder="Username (e.g. admin)" value={instructorUsername} onChange={e => setInstructorUsername(e.target.value)} disabled={!!lockoutTime}/>
+            <form onSubmit={handleInstructorLogin} className="text-left space-y-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide ml-1 mb-1">Username</label>
+                    <input required type="text" className="w-full p-4 border border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition" placeholder="Username (e.g. admin)" value={instructorUsername} onChange={e => setInstructorUsername(e.target.value)} disabled={!!lockoutTime}/>
+                </div>
                 
-                <div className="relative mb-4">
-                    <input 
-                        required 
-                        type={showPassword ? "text" : "password"} 
-                        className="w-full p-3 border border-gray-300 rounded-lg pr-10" 
-                        placeholder="Password" 
-                        value={instructorPass} 
-                        onChange={e => setInstructorPass(e.target.value)}
-                        disabled={!!lockoutTime}
-                    />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600" disabled={!!lockoutTime}>
-                        {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
-                    </button>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide ml-1 mb-1">Password</label>
+                    <div className="relative">
+                        <input 
+                            required 
+                            type={showPassword ? "text" : "password"} 
+                            className="w-full p-4 border border-gray-200 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition pr-12" 
+                            placeholder="••••••••" 
+                            value={instructorPass} 
+                            onChange={e => setInstructorPass(e.target.value)}
+                            disabled={!!lockoutTime}
+                        />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 transition" disabled={!!lockoutTime}>
+                            {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
+                        </button>
+                    </div>
                 </div>
                 
                 {/* INLINE ERROR DISPLAY */}
                 {loginError && (
-                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-start gap-2 text-left animate-fade-in">
+                    <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl flex items-start gap-2 text-left animate-fade-in border border-red-100">
                         <AlertCircle size={16} className="mt-0.5 shrink-0"/>
-                        <div>{loginError}</div>
+                        <div className="font-medium">{loginError}</div>
                     </div>
                 )}
 
-                <div className="flex gap-2 mb-4">
-                    <button type="button" onClick={() => setView('auth')} className="flex-1 py-3 bg-gray-200 rounded-lg font-bold text-gray-600">Batal</button>
-                    <button type="submit" disabled={!!lockoutTime || loading} className="flex-1 py-3 bg-indigo-900 text-white rounded-lg font-bold disabled:bg-gray-400 flex items-center justify-center gap-2">
+                <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setView('auth')} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition">Batal</button>
+                    <button type="submit" disabled={!!lockoutTime || loading} className="flex-1 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition shadow-lg">
                         {loading ? <Loader className="animate-spin" size={18}/> : "Masuk"}
                     </button>
                 </div>
@@ -784,38 +700,51 @@ export default function App() {
             {showLogoutConfirm && (<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl"><h3 className="text-xl font-bold text-gray-900 mb-2">Keluar Aplikasi?</h3><div className="flex gap-3 mt-4"><button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">Batal</button><button onClick={confirmLogout} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Ya, Keluar</button></div></div></div>)}
             {notification && <div className="fixed top-4 right-4 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-bounce">{notification}</div>}
 
-            <header className="bg-white border-b p-4 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3"><div className="bg-indigo-100 p-2 rounded-lg"><Settings size={20} className="text-indigo-600"/></div><div><h1 className="text-xl font-bold text-gray-900">Pengaturan Admin</h1><p className="text-xs text-gray-500">Halo, {activeInstructorSession?.name}</p></div></div>
-                <button onClick={requestLogout} className="text-sm font-bold text-red-600 hover:text-red-700">Keluar</button>
+            <header className="bg-white border-b p-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
+                <div className="flex items-center gap-3"><div className="bg-indigo-100 p-2 rounded-xl"><Settings size={20} className="text-indigo-600"/></div><div><h1 className="text-xl font-bold text-gray-900">Pengaturan Admin</h1><p className="text-xs text-gray-500">Halo, {activeInstructorSession?.name}</p></div></div>
+                <button onClick={requestLogout} className="text-sm font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition">Keluar</button>
             </header>
-            <main className="flex-1 p-6 max-w-4xl mx-auto w-full overflow-y-auto">
-                <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                    <button onClick={() => setActiveSettingsTab('db')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${activeSettingsTab === 'db' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 shadow-sm'}`}><Database size={16} className="inline mr-2"/> Database (DB)</button>
-                    <button onClick={() => setActiveSettingsTab('code')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${activeSettingsTab === 'code' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 shadow-sm'}`}><Code size={16} className="inline mr-2"/> Backend (GAS)</button>
-                    <button onClick={() => { setActiveSettingsTab('users'); fetchInstructorList(); }} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${activeSettingsTab === 'users' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 shadow-sm'}`}><Users size={16} className="inline mr-2"/> Manajemen Instruktur</button>
+            <main className="flex-1 p-6 max-w-5xl mx-auto w-full overflow-y-auto">
+                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                    <button onClick={() => setActiveSettingsTab('db')} className={`px-5 py-2.5 rounded-xl font-bold whitespace-nowrap transition-all ${activeSettingsTab === 'db' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'}`}><Database size={16} className="inline mr-2"/> Database (DB)</button>
+                    <button onClick={() => setActiveSettingsTab('code')} className={`px-5 py-2.5 rounded-xl font-bold whitespace-nowrap transition-all ${activeSettingsTab === 'code' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'}`}><Code size={16} className="inline mr-2"/> Backend (GAS)</button>
+                    <button onClick={() => { setActiveSettingsTab('users'); fetchInstructorList(); }} className={`px-5 py-2.5 rounded-xl font-bold whitespace-nowrap transition-all ${activeSettingsTab === 'users' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'}`}><Users size={16} className="inline mr-2"/> Manajemen Instruktur</button>
                 </div>
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
+                <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-8 min-h-[400px]">
                     {activeSettingsTab === 'db' && (
-                        <div className="space-y-6">
-                            <div><h3 className="text-lg font-bold text-gray-900 mb-2">Konfigurasi Database</h3><div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 mb-4"><strong>Multi-Tenancy Mode:</strong> Pisahkan data workshop dengan memasukkan ID Spreadsheet berbeda.</div><div className="flex gap-2"><input type="text" value={newTargetSheetId} onChange={e => setNewTargetSheetId(e.target.value)} placeholder="Target Spreadsheet ID..." className="flex-1 p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500"/><button onClick={saveTargetSheetId} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700">Set Database</button></div></div>
-                            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200"><h4 className="font-bold text-gray-700 text-xs uppercase mb-2">Database Aktif:</h4><div className="flex items-center gap-2"><Database size={16} className={targetSheetId ? "text-green-600" : "text-gray-400"}/><code className="text-gray-800 font-mono text-sm break-all">{targetSheetId ? targetSheetId : "MASTER DATABASE (Default)"}</code></div></div>
+                        <div className="space-y-8 animate-fade-in">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 mb-2">Konfigurasi Database</h3>
+                                <div className="bg-blue-50 p-4 rounded-xl text-sm text-blue-800 mb-4 border border-blue-100 flex items-start gap-3"><Database size={20} className="shrink-0 mt-0.5"/><div><strong>Multi-Tenancy Mode:</strong> Pisahkan data workshop dengan memasukkan ID Spreadsheet berbeda. Kosongkan untuk menggunakan database default.</div></div>
+                                <div className="flex gap-3">
+                                    <input type="text" value={newTargetSheetId} onChange={e => setNewTargetSheetId(e.target.value)} placeholder="Target Spreadsheet ID (Optional)..." className="flex-1 p-4 border border-gray-200 rounded-xl font-mono text-sm focus:ring-4 focus:ring-indigo-100 outline-none transition"/>
+                                    <button onClick={saveTargetSheetId} className="bg-green-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-100 transition">Simpan</button>
+                                </div>
+                            </div>
+                            <div className="p-6 bg-gray-50 rounded-2xl border border-gray-200">
+                                <h4 className="font-bold text-gray-500 text-xs uppercase tracking-wider mb-2">Database Aktif Saat Ini</h4>
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-white rounded-lg border border-gray-200"><Database size={20} className={targetSheetId ? "text-green-600" : "text-gray-400"}/></div>
+                                    <code className="text-gray-900 font-mono text-sm break-all bg-white px-3 py-1 rounded border border-gray-200">{targetSheetId ? targetSheetId : "MASTER DATABASE (Default)"}</code>
+                                </div>
+                            </div>
                         </div>
                     )}
                     {activeSettingsTab === 'code' && (
-                        <div className="h-full flex flex-col">
-                            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 mb-4 text-sm text-yellow-800 flex items-start gap-3"><ShieldCheck size={20} className="mt-0.5 shrink-0 text-yellow-600"/><div><p className="font-bold">Penting:</p><p>Update kode di Apps Script jika ingin mengaktifkan fitur login baru.</p></div></div>
-                            <div className="relative group"><textarea readOnly className="w-full h-96 p-4 font-mono text-xs text-gray-300 bg-gray-900 rounded-lg resize-none focus:outline-none" value={BACKEND_CODE_DISPLAY}/><button onClick={copyScriptToClipboard} className="absolute top-4 right-4 bg-white text-gray-800 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-gray-100 transition shadow-lg"><Copy size={14}/> Salin</button></div>
+                        <div className="h-full flex flex-col animate-fade-in">
+                            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-4 text-sm text-amber-800 flex items-start gap-3"><ShieldCheck size={20} className="mt-0.5 shrink-0 text-amber-600"/><div><p className="font-bold">Penting:</p><p>Update kode di Apps Script jika ingin mengaktifkan fitur login baru.</p></div></div>
+                            <div className="relative group flex-1"><textarea readOnly className="w-full h-96 p-6 font-mono text-xs text-gray-300 bg-gray-900 rounded-2xl resize-none focus:outline-none" value={BACKEND_CODE_DISPLAY}/><button onClick={copyScriptToClipboard} className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 backdrop-blur-md transition border border-white/10"><Copy size={14}/> Salin Kode</button></div>
                         </div>
                     )}
                     {activeSettingsTab === 'users' && (
-                        <div>
-                            <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold text-gray-900">Daftar Instruktur</h3>{isAdmin && <button onClick={() => setShowAddInstructor(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><UserPlus size={16}/> Tambah Instruktur</button>}</div>
+                        <div className="animate-fade-in">
+                            <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold text-gray-900">Daftar Instruktur</h3>{isAdmin && <button onClick={() => setShowAddInstructor(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"><UserPlus size={18}/> Tambah Instruktur</button>}</div>
                             {showAddInstructor && (
-                                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6 animate-fade-in"><h4 className="font-bold text-sm mb-3">Tambah Instruktur Baru</h4><div className="flex gap-2 mb-2"><input type="text" placeholder="Username (tanpa spasi)" className="flex-1 p-2 border rounded text-sm" value={newInstructor.username} onChange={e => setNewInstructor({...newInstructor, username: e.target.value.replace(/\s/g,'')})}/><input type="text" placeholder="Nama Lengkap" className="flex-1 p-2 border rounded text-sm" value={newInstructor.name} onChange={e => setNewInstructor({...newInstructor, name: e.target.value})}/></div><div className="text-xs text-gray-500 mb-3">Password default: <strong>Instruktur123!</strong></div><div className="flex gap-2"><button onClick={handleAddInstructor} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-bold">Simpan</button><button onClick={() => setShowAddInstructor(false)} className="bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-bold">Batal</button></div></div>
+                                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 mb-8 animate-fade-in-up shadow-inner"><h4 className="font-bold text-sm mb-4 text-gray-800">Tambah Instruktur Baru</h4><div className="flex gap-3 mb-3"><input type="text" placeholder="Username (tanpa spasi)" className="flex-1 p-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={newInstructor.username} onChange={e => setNewInstructor({...newInstructor, username: e.target.value.replace(/\s/g,'')})}/><input type="text" placeholder="Nama Lengkap" className="flex-1 p-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={newInstructor.name} onChange={e => setNewInstructor({...newInstructor, name: e.target.value})}/></div><div className="text-xs text-gray-500 mb-4 bg-white px-3 py-2 rounded border border-gray-200 inline-block">Password default: <strong className="font-mono text-indigo-600">Instruktur123!</strong></div><div className="flex gap-3"><button onClick={handleAddInstructor} className="bg-green-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-green-700 transition shadow-md">Simpan</button><button onClick={() => setShowAddInstructor(false)} className="bg-white text-gray-700 border border-gray-300 px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-50 transition">Batal</button></div></div>
                             )}
-                            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-100 text-gray-600 border-b"><tr><th className="p-3">Nama</th><th className="p-3">Username</th><th className="p-3">Role</th><th className="p-3 text-right">Aksi</th></tr></thead><tbody className="divide-y">{instructorList?.map((user) => (<tr key={user.username}><td className="p-3 font-medium">{user.name}</td><td className="p-3 font-mono text-xs">{user.username}</td><td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{user.role}</span></td><td className="p-3 text-right flex justify-end gap-2">{(isAdmin || activeInstructorSession?.username === user.username) && (<button onClick={() => { setNewPasswordInput(""); setShowPasswordChange(user.username); }} className="text-indigo-600 hover:bg-indigo-50 p-2 rounded" title="Ganti Password"><Key size={16}/></button>)}{isAdmin && user.role !== 'ADMIN' && (<button onClick={() => handleDeleteInstructor(user.username)} className="text-red-600 hover:bg-red-50 p-2 rounded" title="Hapus User"><Trash2 size={16}/></button>)}</td></tr>))}</tbody></table></div>
+                            <div className="overflow-hidden rounded-2xl border border-gray-200"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200"><tr><th className="p-4">Nama</th><th className="p-4">Username</th><th className="p-4">Role</th><th className="p-4 text-right">Aksi</th></tr></thead><tbody className="divide-y divide-gray-100 bg-white">{instructorList?.map((user) => (<tr key={user.username} className="hover:bg-gray-50 transition"><td className="p-4 font-bold text-gray-800">{user.name}</td><td className="p-4 font-mono text-xs text-gray-500 bg-gray-50 w-min rounded px-2 py-1">{user.username}</td><td className="p-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{user.role}</span></td><td className="p-4 text-right flex justify-end gap-2">{(isAdmin || activeInstructorSession?.username === user.username) && (<button onClick={() => { setNewPasswordInput(""); setShowPasswordChange(user.username); }} className="text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition" title="Ganti Password"><Key size={18}/></button>)}{isAdmin && user.role !== 'ADMIN' && (<button onClick={() => handleDeleteInstructor(user.username)} className="text-red-600 hover:bg-red-100 p-2 rounded-lg transition" title="Hapus User"><Trash2 size={18}/></button>)}</td></tr>))}</tbody></table></div>
                             {showPasswordChange && (
-                                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-full max-w-sm"><h3 className="font-bold text-lg mb-4">Ganti Password: {showPasswordChange}</h3><input type="password" placeholder="Password Baru" className="w-full p-3 border rounded-lg mb-4" value={newPasswordInput} onChange={e => setNewPasswordInput(e.target.value)}/><div className="flex gap-2"><button onClick={() => handleResetPassword(showPasswordChange)} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">Simpan</button><button onClick={() => setShowPasswordChange(false)} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-bold">Batal</button></div></div></div>
+                                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl animate-fade-in-up"><h3 className="font-bold text-xl mb-1">Ganti Password</h3><p className="text-sm text-gray-500 mb-6">User: {showPasswordChange}</p><input type="password" placeholder="Password Baru" className="w-full p-4 border border-gray-200 rounded-xl mb-6 focus:ring-4 focus:ring-indigo-100 outline-none" value={newPasswordInput} onChange={e => setNewPasswordInput(e.target.value)}/><div className="flex gap-3"><button onClick={() => handleResetPassword(showPasswordChange)} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-100">Simpan</button><button onClick={() => setShowPasswordChange(false)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition">Batal</button></div></div></div>
                             )}
                         </div>
                     )}
@@ -829,7 +758,7 @@ export default function App() {
   // 4. INSTRUCTOR DASHBOARD VIEW
   if (view === 'instructor_dashboard') {
     return (
-      <div className="min-h-screen bg-gray-100 font-sans pb-20" onContextMenu={(e) => e.preventDefault()}>
+      <div className="min-h-screen bg-gray-50 font-sans pb-20" onContextMenu={(e) => e.preventDefault()}>
         {showSlideConfigModal && (
             <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"><h3 className="text-xl font-bold text-gray-900 mb-2">Ganti Slide Presentasi</h3><input type="text" value={newSlideIdInput} onChange={e => setNewSlideIdInput(e.target.value)} placeholder="Contoh: https://docs.google.com/presentation/d/..." className="w-full p-3 border border-gray-300 rounded-lg mb-4 font-mono text-xs"/><div className="flex gap-3"><button onClick={() => setShowSlideConfigModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold">Batal</button><button onClick={updateSlideIdConfig} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">Simpan</button></div></div></div>
         )}
@@ -837,73 +766,74 @@ export default function App() {
         {/* MODAL EDIT MATERIALS */}
         {showMaterialEditor && (
              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white rounded-2xl p-6 max-w-4xl w-full h-[80vh] flex flex-col shadow-2xl">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-bold text-gray-900">Edit Materi Workshop</h3>
-                        <button onClick={() => { setShowMaterialEditor(false); setEditingMaterial(null); }} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} className="text-gray-500"/></button>
+                <div className="bg-white rounded-3xl p-8 max-w-5xl w-full h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+                    <div className="flex justify-between items-center mb-6 shrink-0">
+                        <div>
+                            <h3 className="text-2xl font-bold text-gray-900">Edit Materi Workshop</h3>
+                            <p className="text-sm text-gray-500">Sesuaikan konten kurikulum untuk kelas ini.</p>
+                        </div>
+                        <button onClick={() => { setShowMaterialEditor(false); setEditingMaterial(null); }} className="p-2 hover:bg-gray-100 rounded-full transition"><X size={24} className="text-gray-500"/></button>
                     </div>
                     
-                    <div className="flex-1 overflow-hidden flex gap-4">
+                    <div className="flex-1 overflow-hidden flex gap-6">
                         {/* List Steps */}
-                        <div className="w-1/3 border-r border-gray-200 pr-4 overflow-y-auto space-y-2">
+                        <div className="w-1/3 border-r border-gray-100 pr-6 overflow-y-auto space-y-3 custom-scrollbar">
                              {materials.map((m) => (
                                  <div 
                                     key={m.id} 
                                     onClick={() => setEditingMaterial(m)}
-                                    className={`p-3 rounded-lg cursor-pointer border transition ${editingMaterial?.id === m.id ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-300' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}
+                                    className={`p-4 rounded-xl cursor-pointer border transition-all duration-200 group ${editingMaterial?.id === m.id ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-100 shadow-md' : 'bg-white border-gray-100 hover:bg-gray-50 hover:border-gray-200'}`}
                                  >
-                                     <div className="flex items-center gap-2 mb-1">
-                                         <span className="text-xs font-bold bg-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded">Step {m.id}</span>
-                                         <span className="text-xs text-gray-500">{m.duration}</span>
+                                     <div className="flex items-center justify-between mb-2">
+                                         <span className={`text-xs font-bold px-2 py-1 rounded-lg ${editingMaterial?.id === m.id ? 'bg-indigo-200 text-indigo-800' : 'bg-gray-100 text-gray-600'}`}>Step {m.id}</span>
+                                         <span className="text-xs text-gray-400 font-medium">{m.duration}</span>
                                      </div>
-                                     <h4 className="font-bold text-sm text-gray-800 line-clamp-1">{m.title}</h4>
+                                     <h4 className={`font-bold text-sm line-clamp-1 ${editingMaterial?.id === m.id ? 'text-indigo-900' : 'text-gray-700'}`}>{m.title}</h4>
                                  </div>
                              ))}
                         </div>
 
                         {/* Editor Form */}
-                        <div className="w-2/3 pl-2 overflow-y-auto">
+                        <div className="w-2/3 pl-2 overflow-y-auto custom-scrollbar">
                             {editingMaterial ? (
-                                <div className="space-y-4 animate-fade-in">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-500 mb-1">Judul Tahapan</label>
-                                            <input type="text" className="w-full p-2 border rounded text-sm font-bold" value={editingMaterial.title} onChange={e => handleUpdateMaterial('title', e.target.value)} />
+                                <div className="space-y-5 animate-fade-in pb-4">
+                                    <div className="grid grid-cols-3 gap-5">
+                                        <div className="col-span-2">
+                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Judul Tahapan</label>
+                                            <input type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none transition" value={editingMaterial.title} onChange={e => handleUpdateMaterial('title', e.target.value)} />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-gray-500 mb-1">Durasi</label>
-                                            <input type="text" className="w-full p-2 border rounded text-sm" value={editingMaterial.duration} onChange={e => handleUpdateMaterial('duration', e.target.value)} />
+                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Durasi</label>
+                                            <input type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition" value={editingMaterial.duration} onChange={e => handleUpdateMaterial('duration', e.target.value)} />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Deskripsi Singkat</label>
-                                        <input type="text" className="w-full p-2 border rounded text-sm" value={editingMaterial.description} onChange={e => handleUpdateMaterial('description', e.target.value)} />
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Deskripsi Singkat</label>
+                                        <input type="text" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition" value={editingMaterial.description} onChange={e => handleUpdateMaterial('description', e.target.value)} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Konten / Tugas Lengkap</label>
-                                        <textarea className="w-full h-40 p-3 border rounded text-sm leading-relaxed" value={editingMaterial.content} onChange={e => handleUpdateMaterial('content', e.target.value)} />
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Konten / Tugas Lengkap</label>
+                                        <textarea className="w-full h-64 p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm leading-relaxed text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition resize-none" value={editingMaterial.content} onChange={e => handleUpdateMaterial('content', e.target.value)} />
                                     </div>
-                                    <div className="pt-2 flex justify-end">
-                                        <button onClick={saveEditingMaterial} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-700">
-                                            <CheckCircle size={16}/> Simpan Perubahan (Sementara)
+                                    <div className="flex justify-between items-center pt-2 border-t border-gray-100 mt-4">
+                                        <div className="text-xs text-orange-500 bg-orange-50 px-3 py-1 rounded-full font-medium">Perubahan belum disimpan ke database</div>
+                                        <button onClick={saveEditingMaterial} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-lg shadow-blue-100">
+                                            <CheckCircle size={16}/> Update Draft
                                         </button>
-                                    </div>
-                                    <div className="bg-yellow-50 p-3 rounded text-xs text-yellow-800">
-                                        Klik "Simpan Perubahan" untuk update state lokal. Jangan lupa klik "Simpan ke Database" di bawah untuk menyimpan permanen.
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                                    <Edit3 size={48} className="mb-2 opacity-20"/>
-                                    <p className="text-sm">Pilih materi di sebelah kiri untuk diedit</p>
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
+                                    <div className="p-4 bg-white rounded-full shadow-sm mb-4"><Edit3 size={32} className="text-indigo-300"/></div>
+                                    <p className="text-sm font-medium">Pilih materi di sebelah kiri untuk mulai mengedit</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-gray-200 flex justify-end gap-3">
-                         <button onClick={() => setShowMaterialEditor(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold">Tutup</button>
-                         <button onClick={saveMaterials} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg flex items-center gap-2">
+                    <div className="mt-6 pt-6 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                         <button onClick={() => setShowMaterialEditor(false)} className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition">Tutup</button>
+                         <button onClick={saveMaterials} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-200 flex items-center gap-2 transition transform active:scale-95">
                             <Save size={18}/> Simpan Permanen ke Database
                          </button>
                     </div>
@@ -914,35 +844,103 @@ export default function App() {
         {showLogoutConfirm && (<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl"><h3 className="text-xl font-bold text-gray-900 mb-2">Keluar Aplikasi?</h3><div className="flex gap-3 mt-4"><button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">Batal</button><button onClick={confirmLogout} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Ya, Keluar</button></div></div></div>)}
         {notification && <div className="fixed top-4 right-4 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-bounce">{notification}</div>}
 
-        <header className="bg-indigo-900 text-white p-4 sticky top-0 z-20 shadow-md flex flex-wrap gap-4 justify-between items-center">
-          <div className="flex items-center gap-3"><Users size={24} /><div><h1 className="font-bold text-lg hidden md:block">Dashboard Mengajar</h1><p className="text-xs opacity-70 block md:hidden">{activeInstructorSession?.name}</p></div></div>
-          <div className="flex items-center gap-2 bg-indigo-800 px-3 py-1 rounded-full border border-indigo-700 shadow-inner">
-              <Monitor size={16} className="text-indigo-300"/>
-              <button onClick={() => { setNewSlideIdInput(currentSlideId); setShowSlideConfigModal(true); }} className="hover:bg-indigo-700 p-1.5 rounded text-yellow-300 ml-1" title="Ganti URL Slide"><Edit3 size={14}/></button>
+        <header className="bg-white/90 backdrop-blur-md border-b border-indigo-100 p-4 sticky top-0 z-30 shadow-sm flex flex-wrap gap-4 justify-between items-center">
+          <div className="flex items-center gap-4">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200"><Users size={24} /></div>
+              <div><h1 className="font-extrabold text-lg text-gray-900 leading-tight">Dashboard Mengajar</h1><p className="text-xs text-indigo-600 font-medium bg-indigo-50 inline-block px-2 py-0.5 rounded mt-0.5">{activeInstructorSession?.name}</p></div>
+          </div>
+          <div className="flex items-center gap-3 bg-gray-50 px-2 py-1.5 rounded-xl border border-gray-200 shadow-inner">
+              <Monitor size={18} className="text-gray-400 ml-2"/>
+              <div className="h-6 w-px bg-gray-300 mx-1"></div>
+              <button onClick={() => { setNewSlideIdInput(currentSlideId); setShowSlideConfigModal(true); }} className="hover:bg-white p-2 rounded-lg text-gray-600 hover:text-indigo-600 transition shadow-sm" title="Ganti URL Slide"><Edit3 size={16}/></button>
           </div>
           
-          <div className="flex items-center gap-2">
-             <button onClick={() => setShowMaterialEditor(true)} className="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-indigo-500 shadow-sm">
-                 <FileText size={14}/> Edit Materi
+          <div className="flex items-center gap-3">
+             <button onClick={() => setShowMaterialEditor(true)} className="bg-white border border-gray-200 hover:border-indigo-300 text-gray-700 hover:text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-sm group">
+                 <div className="p-1 bg-indigo-50 rounded group-hover:bg-indigo-100 transition"><FileText size={14} className="text-indigo-600"/></div> Edit Materi
              </button>
-             <div className="w-px h-6 bg-indigo-800 mx-1"></div>
-             <button onClick={fetchStudents} className="p-2 hover:bg-indigo-800 rounded-full" title="Refresh Data"><RefreshCw size={20} className={loading ? "animate-spin" : ""} /></button>
-             <button onClick={requestLogout} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full text-xs font-bold transition">Keluar</button>
+             <div className="w-px h-8 bg-gray-200 mx-1"></div>
+             <button onClick={fetchStudents} className="p-2.5 hover:bg-gray-100 text-gray-500 rounded-xl transition" title="Refresh Data"><RefreshCw size={20} className={loading ? "animate-spin" : ""} /></button>
+             <button onClick={requestLogout} className="bg-red-50 hover:bg-red-100 text-red-600 px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2"><LogOut size={14}/> Keluar</button>
           </div>
         </header>
-        <main className="p-4 max-w-6xl mx-auto space-y-6">
-          <div className="bg-white p-4 rounded-xl shadow relative">
-            <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-bold text-gray-500 uppercase flex items-center gap-2">Live Preview <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Instruktur</span></h3>
-                <button onClick={() => toggleFullScreen(instructorSlideRef)} className="text-gray-500 hover:text-indigo-600 flex items-center gap-1 text-xs font-bold" title="Layar Penuh">
-                    {isExpanded ? <Minimize size={16}/> : <Maximize size={16}/>} {isExpanded ? 'Keluar Fullscreen' : 'Fullscreen'}
-                </button>
+        <main className="p-6 max-w-7xl mx-auto space-y-8">
+          <div className="bg-white p-1 rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative">
+            <div className="absolute top-4 left-4 z-10 flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                <span className="text-xs font-bold tracking-wide">LIVE PREVIEW</span>
             </div>
-            <div ref={instructorSlideRef} className={`bg-black rounded-lg overflow-hidden border border-gray-300 relative group transition-all duration-300 ${isExpanded ? 'fixed inset-0 z-[100] w-screen h-screen rounded-none border-0' : 'aspect-video w-full'}`}>
+            <button onClick={() => toggleFullScreen(instructorSlideRef)} className="absolute bottom-4 right-4 z-10 bg-white/90 text-gray-800 p-2.5 rounded-xl hover:bg-indigo-600 hover:text-white backdrop-blur-md transition shadow-lg flex items-center gap-2 group" title="Layar Penuh">
+                {isExpanded ? <Minimize size={18}/> : <Maximize size={18}/>}
+                <span className="text-xs font-bold pr-1 hidden group-hover:inline-block transition-all">{isExpanded ? 'Keluar' : 'Fullscreen'}</span>
+            </button>
+            <div ref={instructorSlideRef} className={`bg-gray-900 rounded-xl overflow-hidden relative group transition-all duration-300 ${isExpanded ? 'fixed inset-0 z-[100] w-screen h-screen rounded-none border-0' : 'aspect-video w-full'}`}>
                 <iframe key={currentSlideId} src={getEmbedUrl(currentSlideId)} className="w-full h-full" allowFullScreen={true} title="Slide Preview"/>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-50 border-b"><tr><th className="p-4 text-sm font-semibold text-gray-600">Peserta</th><th className="p-4 text-sm font-semibold text-gray-600">Step</th><th className="p-4 text-sm font-semibold text-gray-600">Jawaban</th><th className="p-4 text-right">Aksi</th></tr></thead><tbody className="divide-y divide-gray-100">{instructorData?.map((student) => (<tr key={student.userId} className="hover:bg-gray-50"><td className="p-4 align-top"><div className="font-bold">{student.name}</div><div className="text-xs text-gray-500">@{student.username}</div></td><td className="p-4 align-top"><span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs font-bold">Step {student.step}</span></td><td className="p-4 align-top max-w-xs">{student.answer !== '-' ? <div className="text-sm italic bg-gray-50 p-2 rounded">"{student.answer}"</div> : <span className="text-gray-300">-</span>}</td><td className="p-4 text-right align-top">{student.status === 'WAITING_APPROVAL' ? <button onClick={() => approveStudent(student.userId)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 shadow-sm">Approve</button> : <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-700">{student.status}</span>}</td></tr>))}</tbody></table></div></div>
+          
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users size={18} className="text-gray-400"/> Daftar Peserta Aktif</h3>
+                  <span className="text-xs font-medium text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200">{instructorData.length} Siswa</span>
+              </div>
+              <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                          <tr>
+                              <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Peserta</th>
+                              <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Progress</th>
+                              <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Jawaban Terkini</th>
+                              <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Aksi</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                          {instructorData?.map((student) => (
+                              <tr key={student.userId} className="hover:bg-indigo-50/30 transition group">
+                                  <td className="p-5 align-top">
+                                      <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm shadow-sm">{student.name.charAt(0)}</div>
+                                          <div>
+                                              <div className="font-bold text-gray-900">{student.name}</div>
+                                              <div className="text-xs text-gray-500 font-mono">@{student.username}</div>
+                                          </div>
+                                      </div>
+                                  </td>
+                                  <td className="p-5 align-top pt-7">
+                                      <div className="relative pt-1">
+                                          <div className="flex mb-2 items-center justify-between">
+                                              <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-100">Step {student.step}</span>
+                                          </div>
+                                          <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-100">
+                                              <div style={{ width: `${(student.step / materials.length) * 100}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500 transition-all duration-500"></div>
+                                          </div>
+                                      </div>
+                                  </td>
+                                  <td className="p-5 align-top pt-6 max-w-xs">
+                                      {student.answer !== '-' ? 
+                                          <div className="text-sm text-gray-600 bg-white border border-gray-200 p-3 rounded-xl shadow-sm italic leading-relaxed relative">
+                                              <div className="absolute -top-2 left-4 w-3 h-3 bg-white border-t border-l border-gray-200 transform rotate-45"></div>
+                                              "{student.answer}"
+                                          </div> : 
+                                          <span className="text-gray-300 text-sm flex items-center gap-1"><Loader size={12} className="animate-spin"/> Menunggu...</span>
+                                      }
+                                  </td>
+                                  <td className="p-5 text-right align-top pt-6">
+                                      {student.status === 'WAITING_APPROVAL' ? 
+                                          <button onClick={() => approveStudent(student.userId)} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 hover:shadow-indigo-200 transition transform active:scale-95 flex items-center gap-2 ml-auto">
+                                              <CheckCircle size={14}/> Approve
+                                          </button> : 
+                                          <span className={`text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 ${student.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500'}`}>
+                                              {student.status === 'APPROVED' && <CheckCircle size={12}/>} {student.status}
+                                          </span>
+                                      }
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
         </main>
       </div>
     );
@@ -955,11 +953,11 @@ export default function App() {
   const isWaiting = userData.status === 'WAITING_APPROVAL';
 
   return (
-    <div className="flex h-screen bg-white font-sans overflow-hidden">
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
       {showLogoutConfirm && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl"><h3 className="text-xl font-bold text-gray-900 mb-2">Keluar Aplikasi?</h3><div className="flex gap-3 mt-4"><button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">Batal</button><button onClick={confirmLogout} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Ya, Keluar</button></div></div></div>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"><div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4"><LogOut size={32} className="text-red-500"/></div><h3 className="text-xl font-bold text-gray-900 mb-2">Keluar Aplikasi?</h3><p className="text-sm text-gray-500 mb-6">Progres Anda akan disimpan secara otomatis.</p><div className="flex gap-3"><button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition">Batal</button><button onClick={confirmLogout} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-100 transition">Ya, Keluar</button></div></div></div>
       )}
-      {notification && <div className="fixed top-4 right-4 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl z-50 animate-bounce">{notification}</div>}
+      {notification && <div className="fixed top-4 right-4 bg-gray-900/90 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce backdrop-blur border border-gray-700 text-sm font-medium">{notification}</div>}
 
       {/* MOBILE NAV OVERLAY */}
       {mobileMenuOpen && (
@@ -971,86 +969,135 @@ export default function App() {
 
       {/* SIDEBAR NAVIGATION (DRAWER ON MOBILE) */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-gray-50 border-r border-gray-200 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
+        fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
         md:relative md:translate-x-0
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-                <div className="bg-indigo-100 p-2 rounded-full"><User size={20} className="text-indigo-600"/></div>
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div className="flex items-center gap-4">
+                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2.5 rounded-xl shadow-lg shadow-indigo-200"><User size={20} className="text-white"/></div>
                 <div className="overflow-hidden">
                     <h2 className="font-bold text-gray-900 text-sm truncate w-32">{userData.name}</h2>
-                    <p className="text-xs text-gray-500">@{userData.username}</p>
+                    <p className="text-xs text-gray-500 font-mono">@{userData.username}</p>
                 </div>
             </div>
             {/* Close Button for Mobile */}
-            <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-gray-500 hover:text-gray-700">
+            <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-gray-700 transition bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
                 <X size={20} />
             </button>
         </div>
         
         {/* Logout Button inside Sidebar */}
-        <div className="px-6 pb-2 pt-2">
-            <button onClick={requestLogout} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-semibold cursor-pointer w-full text-left mt-2 px-1">
-                <LogOut size={12}/> Logout
+        <div className="px-6 py-4">
+            <button onClick={requestLogout} className="text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 flex items-center justify-center gap-2 py-3 rounded-xl w-full transition border border-red-100">
+                <LogOut size={14}/> Logout
             </button>
         </div>
 
-        <div className="p-4 space-y-2 flex-1 overflow-y-auto">
+        <div className="px-4 pb-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+            <h3 className="px-2 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Kurikulum</h3>
             {materials.map((step) => { 
                 const isCurrent = userData?.step === step.id; 
                 const isPast = userData?.step > step.id; 
                 return (
-                    <div key={step.id} className={`p-3 rounded-lg flex items-center gap-3 ${isCurrent ? 'bg-white shadow-sm border border-indigo-100' : 'opacity-60'}`}>
-                        <div className={`p-2 rounded-full ${isPast ? 'bg-green-100 text-green-600' : isCurrent ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200'}`}>
-                            {isPast ? <CheckCircle size={14}/> : renderStepIcon(step.icon, 20)}
+                    <div key={step.id} className={`p-3 rounded-2xl flex items-center gap-4 transition-all duration-300 ${isCurrent ? 'bg-white shadow-lg shadow-indigo-100 border border-indigo-100 scale-[1.02]' : 'hover:bg-gray-50 border border-transparent'}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${isPast ? 'bg-green-100 text-green-600' : isCurrent ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-gray-100 text-gray-400'}`}>
+                            {isPast ? <CheckCircle size={18}/> : renderStepIcon(step.icon, 18)}
                         </div>
-                        <div className="flex-1"><p className="text-sm font-semibold">{step.title}</p></div>
+                        <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-bold truncate ${isCurrent ? 'text-indigo-900' : 'text-gray-600'}`}>{step.title}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{step.duration}</p>
+                        </div>
+                        {isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>}
                     </div>
                 )
             })}
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden md:static relative">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden md:static relative bg-gray-50">
         {/* MOBILE HEADER (Only visible on small screens) */}
-        <div className="md:hidden h-16 bg-white border-b flex items-center justify-between px-4 shrink-0 z-30 shadow-sm">
+        <div className="md:hidden h-16 bg-white/80 backdrop-blur-md border-b flex items-center justify-between px-4 shrink-0 z-30 shadow-sm sticky top-0">
             <div className="flex items-center gap-2 font-bold text-gray-800">
-                <Rocket size={20} className="text-indigo-600"/> 
-                <span>App in 90 Mins</span>
+                <div className="bg-indigo-600 p-1.5 rounded-lg text-white"><Rocket size={16}/></div>
+                <span>Workshop</span>
             </div>
-            <button onClick={() => setMobileMenuOpen(true)} className="p-2 text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200">
+            <button onClick={() => setMobileMenuOpen(true)} className="p-2 text-gray-600 bg-gray-100 rounded-xl active:bg-gray-200 transition">
                 <Menu size={24}/>
             </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div ref={studentSlideRef} className={`bg-gray-900 shadow-lg relative shrink-0 group transition-all duration-300 ${isExpanded ? 'fixed inset-0 z-[100] w-screen h-screen' : 'aspect-video w-full md:max-h-64 lg:max-h-80'}`}>
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div ref={studentSlideRef} className={`bg-gray-900 shadow-2xl relative shrink-0 group transition-all duration-300 ${isExpanded ? 'fixed inset-0 z-[100] w-screen h-screen' : 'aspect-video w-full md:max-h-64 lg:max-h-80'}`}>
              <iframe key={currentSlideId} src={getEmbedUrl(currentSlideId)} className="w-full h-full" allowFullScreen={true} title="Live Presentation"/>
-             <button onClick={() => toggleFullScreen(studentSlideRef)} className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-lg hover:bg-indigo-600 backdrop-blur-sm transition opacity-0 group-hover:opacity-100 flex items-center gap-2" title="Layar Penuh">
+             <button onClick={() => toggleFullScreen(studentSlideRef)} className="absolute bottom-4 right-4 bg-white/10 text-white p-2.5 rounded-xl hover:bg-indigo-600 backdrop-blur-md border border-white/20 transition opacity-0 group-hover:opacity-100 flex items-center gap-2" title="Layar Penuh">
                 {isExpanded ? <Minimize size={20}/> : <Maximize size={20}/>}
                 {isExpanded && <span className="text-xs font-bold pr-1">Keluar</span>}
              </button>
           </div>
 
-          <div className="p-6 md:p-10 max-w-4xl mx-auto pb-20">
+          <div className="p-6 md:p-8 max-w-5xl mx-auto pb-24">
             {!isFinished ? (
                 <div className="animate-fade-in-up">
-                    <div className="mb-6"><span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-xs font-bold tracking-wide">AKTIVITAS TAHAP {userData?.step}</span><h1 className="text-3xl font-extrabold text-gray-900 mt-2">{currentStepData?.title}</h1></div>
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-8">
-                        <p className="text-gray-700 mb-6 leading-relaxed text-lg">{currentStepData?.content}</p>
-                        <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
-                            <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><Send size={16}/> Jawaban / Link Hasil Kerja:</label>
-                            <textarea value={studentInput} onChange={(e) => setStudentInput(e.target.value)} disabled={isApproved || isWaiting} className="w-full h-24 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-4 bg-white" placeholder="Ketikan jawaban di sini..."/>
-                            <div className="flex justify-between items-center mt-2 flex-wrap gap-2">
-                                <span className={`text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2 ${isApproved ? 'bg-green-100 text-green-700' : isWaiting ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>{isApproved ? <CheckCircle size={14}/> : isWaiting ? <Loader size={14} className="animate-spin"/> : <HelpCircle size={14}/>}{isApproved ? 'DISETUJUI' : isWaiting ? 'MENUNGGU REVIEW' : 'BELUM DIKIRIM'}</span>
-                                {isApproved ? <button onClick={handleNextLevel} className="bg-green-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-green-700 flex items-center gap-2 shadow-lg transform hover:-translate-y-1 transition w-full md:w-auto justify-center">Lanjut Materi <ChevronRight size={18}/></button> : <button onClick={() => handleStudentSubmit(studentInput)} disabled={!studentInput || isWaiting} className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition shadow-md w-full md:w-auto justify-center">{isWaiting ? "Terkirim" : "Kirim Jawaban"}</button>}
+                    <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <span className="bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-xs font-extrabold tracking-wider border border-indigo-200 shadow-sm">TAHAP {userData?.step}</span>
+                            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mt-3 leading-tight">{currentStepData?.title}</h1>
+                        </div>
+                        <div className="text-gray-500 text-sm font-medium flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
+                            <ClockIcon duration={currentStepData?.duration}/>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-xl shadow-gray-200/50 mb-8 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500"></div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><BookOpen size={20} className="text-indigo-500"/> Instruksi</h3>
+                        <p className="text-gray-600 mb-8 leading-relaxed text-lg">{currentStepData?.content}</p>
+                        
+                        <div className={`p-6 rounded-2xl border transition-all duration-300 ${isApproved ? 'bg-green-50 border-green-100' : isWaiting ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200'}`}>
+                            <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2 uppercase tracking-wide">
+                                <Send size={16} className={isApproved ? "text-green-600" : "text-indigo-600"}/> 
+                                {isApproved ? "Jawaban Anda (Disetujui)" : "Kirim Jawaban / Link"}
+                            </label>
+                            <textarea 
+                                value={studentInput} 
+                                onChange={(e) => setStudentInput(e.target.value)} 
+                                disabled={isApproved || isWaiting} 
+                                className={`w-full h-32 p-4 border rounded-xl focus:ring-4 outline-none transition text-gray-700 font-medium resize-none ${isApproved ? 'bg-white border-green-200 focus:ring-green-100' : 'bg-white border-gray-200 focus:ring-indigo-100 focus:border-indigo-500'}`} 
+                                placeholder={isApproved ? "Jawaban Anda telah dikunci." : "Ketikan jawaban atau paste link hasil kerja di sini..."}
+                            />
+                            
+                            <div className="flex flex-col md:flex-row justify-between items-center mt-4 gap-4">
+                                <div className={`px-4 py-2 rounded-lg flex items-center gap-2 border ${isApproved ? 'bg-white text-green-700 border-green-200 shadow-sm' : isWaiting ? 'bg-white text-blue-700 border-blue-200 shadow-sm' : 'bg-gray-200 text-gray-500 border-transparent'}`}>
+                                    {isApproved ? <CheckCircle size={16}/> : isWaiting ? <Loader size={16} className="animate-spin"/> : <HelpCircle size={16}/>}
+                                    <span className="text-xs font-extrabold tracking-wide">{isApproved ? 'STATUS: DISETUJUI' : isWaiting ? 'STATUS: MENUNGGU REVIEW' : 'STATUS: BELUM DIKIRIM'}</span>
+                                </div>
+                                
+                                {isApproved ? (
+                                    <button onClick={handleNextLevel} className="w-full md:w-auto bg-green-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-green-700 flex items-center justify-center gap-2 shadow-lg shadow-green-200 transform hover:-translate-y-1 transition text-sm">
+                                        Lanjut Materi Berikutnya <ChevronRight size={18}/>
+                                    </button>
+                                ) : (
+                                    <button onClick={() => handleStudentSubmit(studentInput)} disabled={!studentInput || isWaiting} className="w-full md:w-auto bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-200 transform active:scale-95 text-sm flex items-center justify-center gap-2">
+                                        {isWaiting ? "Sedang Dikirim..." : <><Send size={16}/> Kirim Jawaban</>}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
             ) : (
-                <div className="text-center py-10 bg-gradient-to-br from-indigo-50 to-white rounded-3xl border border-indigo-100"><Award size={80} className="mx-auto text-yellow-500 mb-6 drop-shadow-lg" /><h1 className="text-4xl font-bold text-gray-900 mb-4">Workshop Selesai!</h1><button onClick={requestLogout} className="text-indigo-600 font-bold hover:underline">Logout</button></div>
+                <div className="text-center py-16 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl shadow-2xl shadow-indigo-200 text-white animate-fade-in-up relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                    <div className="relative z-10">
+                        <div className="w-24 h-24 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/30">
+                            <Award size={48} className="text-yellow-300 drop-shadow-md" />
+                        </div>
+                        <h1 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">Selamat!</h1>
+                        <p className="text-lg md:text-xl text-indigo-100 mb-8 max-w-lg mx-auto">Anda telah menyelesaikan seluruh tahapan workshop ini dengan sangat baik.</p>
+                        <button onClick={requestLogout} className="bg-white text-indigo-600 px-8 py-3 rounded-xl font-bold hover:bg-gray-50 transition shadow-lg transform hover:-translate-y-1">Logout & Selesai</button>
+                    </div>
+                </div>
             )}
           </div>
         </div>
@@ -1058,3 +1105,13 @@ export default function App() {
     </div>
   );
 }
+
+// Simple Clock Icon Component for Display
+const ClockIcon = ({ duration }) => (
+    <>
+        <div className="w-4 h-4 rounded-full border-2 border-gray-400 flex items-center justify-center relative">
+            <div className="w-0.5 h-1.5 bg-gray-400 absolute bottom-1.5 left-1.5 transform translate-x-[-50%] origin-bottom"></div>
+        </div>
+        <span>{duration}</span>
+    </>
+);
