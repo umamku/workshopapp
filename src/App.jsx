@@ -298,7 +298,7 @@ export default function App() {
   const getEmbedUrl = (docId) => {
       const safeId = docId || DEFAULT_SLIDE_ID;
       const baseUrlPrefix = safeId.startsWith('2PACX') ? '/d/e/' : '/d/';
-      return `https://docs.google.com/presentation/d/1t9atV83RTrzPRs4_J1ib1xefgYNGNOtgwvE4dHAHPek`;
+      return `https://docs.google.com/presentation${baseUrlPrefix}${safeId}/embed?start=false&loop=false&delayms=60000`;
   };
 
   const toggleFullScreen = async (ref) => {
