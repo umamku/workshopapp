@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* Animasi Fade In (Muncul perlahan) */
+@keyframes fadeIn { 
+  from { opacity: 0; } 
+  to { opacity: 1; } 
+}
+
+/* Animasi Fade In Up (Muncul perlahan sambil bergerak ke atas) */
+@keyframes fadeInUp { 
+  from { opacity: 0; transform: translateY(20px); } 
+  to { opacity: 1; transform: translateY(0); } 
+}
+
+/* Utility Class untuk menerapkan animasi */
+.animate-fade-in { 
+  animation: fadeIn 0.5s ease-out; 
+}
+
+.animate-fade-in-up { 
+  animation: fadeInUp 0.5s ease-out; 
+}
