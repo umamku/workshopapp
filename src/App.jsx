@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, CheckCircle, Lock, Unlock, Code, Send, Play, Award, ChevronRight, Menu, X, Rocket, Users, RefreshCw, Loader, LogOut, User, Monitor, ArrowLeft, ArrowRight, HelpCircle, Edit3, Save, WifiOff, Copy, FileJson, Eye, EyeOff, Settings, ShieldCheck, BarChart, UserPlus, Home, LayoutGrid, Wrench, Database, Key, Trash2, AlertTriangle, UserCog, AlertCircle, FileText, Maximize, Minimize } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, Unlock, Code, Send, Play, Award, ChevronRight, Menu, X, Rocket, Users, RefreshCw, Loader, LogOut, User, Monitor, ArrowLeft, ArrowRight, HelpCircle, Edit3, Save, WifiOff, Copy, FileJson, Eye, EyeOff, Settings, ShieldCheck, BarChart, UserPlus, Home, LayoutGrid, Wrench, Database, Key, Trash2, AlertTriangle, UserCog, AlertCircle, FileText, Maximize, Minimize, Clock, Plus } from 'lucide-react';
 
 // --- KONFIGURASI UTAMA ---
-// URL Backend Google Apps Script Terbaru
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwiQJfU_v_hiLwDb47qpWa-M2Tla7EZ2s_vtUOIpcvp-LX_JK3pl4By3UDUEsOorkuo/exec"; 
 const DEFAULT_SLIDE_ID = "1q1MUsZ68LoyRWubLgX9WIkcjBFLq9_8Zze25fv4etcU";
 
-// --- SECURITY UTILS (ENCODING BASE64) ---
+// --- SECURITY UTILS ---
 const secureEncode = (str) => {
     try {
         return btoa(str);
@@ -15,10 +14,9 @@ const secureEncode = (str) => {
     }
 };
 
-// --- KODE BACKEND (GAS) ---
+// --- BACKEND CODE ---
 const BACKEND_CODE_DISPLAY = `
 // --- COPY KODE INI KE GOOGLE APPS SCRIPT ---
-// PENTING: SETELAH SAVE, KLIK "DEPLOY" -> "MANAGE DEPLOYMENTS" -> "EDIT" -> "VERSION: NEW VERSION"
 
 const SHEET_NAME = "Sheet1";
 const INSTRUCTORS_SHEET = "Instructors";
@@ -153,11 +151,42 @@ function handleRequest(e) {
       for (let i = data.length - 1; i >= 0; i--) if (data[i][1] == userId) return jsonResponse({ result: "success", step: parseInt(data[i][4]), status: data[i][5], slideId: currentSlideId });
       return jsonResponse({ result: "error", message: "User not found" });
     }
+    
+    // --- FITUR REVISI BARU ---
     if (action === "submitTask") {
       const userId = params.userId;
       const data = sheet.getDataRange().getValues();
-      for (let i = data.length - 1; i >= 0; i--) { if (data[i][1] == userId) { sheet.getRange(i + 1, 6).setValue("WAITING_APPROVAL"); sheet.getRange(i + 1, 7).setValue(params.answer); return jsonResponse({ result: "success" }); } }
+      for (let i = data.length - 1; i >= 0; i--) { 
+        if (data[i][1] == userId) { 
+          // Jika sebelumnya NEED_REVISION, hapus feedback instruktur
+          let currentAnswer = data[i][6] || "";
+          if (currentAnswer.includes("--- FEEDBACK INSTRUKTUR ---")) {
+            currentAnswer = currentAnswer.split("\n\n--- FEEDBACK INSTRUKTUR ---")[0];
+          }
+          const newAnswer = currentAnswer ? currentAnswer + "\n\n--- REVISI ---\n" + params.answer : params.answer;
+          sheet.getRange(i + 1, 6).setValue("WAITING_APPROVAL");
+          sheet.getRange(i + 1, 7).setValue(newAnswer);
+          return jsonResponse({ result: "success" }); 
+        } 
+      }
     }
+    
+    if (action === "request_revision") {
+       const userId = params.userId;
+       const feedback = params.feedback || "Perlu revisi.";
+       const data = sheet.getDataRange().getValues();
+       for (let i = data.length - 1; i >= 0; i--) { 
+          if (data[i][1] == userId) { 
+             sheet.getRange(i + 1, 6).setValue("NEED_REVISION");
+             // Simpan feedback dengan format khusus
+             const currentAnswer = data[i][6] || "";
+             const answerWithFeedback = currentAnswer + "\n\n--- FEEDBACK INSTRUKTUR ---\n" + feedback;
+             sheet.getRange(i + 1, 7).setValue(answerWithFeedback);
+             return jsonResponse({ result: "success" }); 
+          } 
+       }
+    }
+    
     if (action === "updateStep") {
        const userId = params.userId;
        const data = sheet.getDataRange().getValues();
@@ -184,7 +213,8 @@ const ICON_MAP = {
   'Code': Code,
   'Send': Send,
   'Play': Play,
-  'Award': Award
+  'Award': Award,
+  'Plus': Plus
 };
 
 const renderStepIcon = (iconName, size = 20) => {
@@ -200,18 +230,41 @@ const DEFAULT_WORKSHOP_STEPS = [
   { id: 5, title: "Selesai", duration: "10 Menit", icon: "Award", description: "Showcase hasil karya.", content: "Selamat! Anda telah menyelesaikan workshop." }
 ];
 
+// --- COMPONENT SKELETON FOR SLIDE LOADING ---
+const SlideSkeleton = () => (
+  <div className="bg-gray-900 w-full h-full flex items-center justify-center">
+    <div className="text-center">
+      <div className="w-16 h-16 bg-gray-800 rounded-full mx-auto mb-4 flex items-center justify-center">
+        <Rocket size={32} className="text-gray-700" />
+      </div>
+      <div className="text-gray-400 text-sm">Loading presentation...</div>
+      <div className="flex items-center justify-center gap-2 mt-4">
+        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+      </div>
+    </div>
+  </div>
+);
+
 // Styles Injection
 const styleSheet = document.createElement("style");
 styleSheet.innerText = `
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
   .animate-fade-in { animation: fadeIn 0.5s ease-out; }
   .animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
-  /* Custom Scrollbar for sleek look */
+  .animate-bounce { animation: bounce 1s infinite; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 `;
 document.head.appendChild(styleSheet);
 
@@ -253,16 +306,30 @@ export default function App() {
   const [instructorUsername, setInstructorUsername] = useState("");
   const [instructorPass, setInstructorPass] = useState("");
 
-  const [userData, setUserData] = useState({ name: '', username: '', userId: '', step: 1, status: 'PENDING' });
+  const [userData, setUserData] = useState({ name: '', username: '', userId: '', step: 1, status: 'PENDING', answer: '' });
   const [studentInput, setStudentInput] = useState("");
    
   const [instructorData, setInstructorData] = useState([]);
 
-  const [currentSlideId, setCurrentSlideId] = useState(DEFAULT_SLIDE_ID);
+  // State untuk slide - menggunakan cache key untuk mencegah flicker
+  const [currentSlideId, setCurrentSlideId] = useState(null);
   const [newSlideIdInput, setNewSlideIdInput] = useState("");
+  const [slideCacheKey, setSlideCacheKey] = useState(Date.now().toString().slice(-6));
 
   const [targetSheetId, setTargetSheetId] = useState("");
   const [newTargetSheetId, setNewTargetSheetId] = useState("");
+
+  // State baru untuk fitur revisi
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [selectedStudentForRevision, setSelectedStudentForRevision] = useState(null);
+  const [revisionFeedback, setRevisionFeedback] = useState("");
+  const [showAnswerHistory, setShowAnswerHistory] = useState(false);
+  const [selectedStudentHistory, setSelectedStudentHistory] = useState(null);
+
+  // State untuk mengatasi slide flicker
+  const [slideLoading, setSlideLoading] = useState(true);
+  const [slideReady, setSlideReady] = useState(false);
+  const [slideError, setSlideError] = useState(false);
 
   const studentSlideRef = useRef(null);
   const instructorSlideRef = useRef(null);
@@ -295,10 +362,33 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const getEmbedUrl = (docId) => {
-      const safeId = docId || DEFAULT_SLIDE_ID;
+  // PERBAIKAN: Fungsi getEmbedUrl - tanpa cache buster otomatis
+  const getEmbedUrl = (docId, forceRefresh = false) => {
+      if (!docId) return null;
+      
+      const safeId = docId;
       const baseUrlPrefix = safeId.startsWith('2PACX') ? '/d/e/' : '/d/';
-      return `https://docs.google.com/presentation${baseUrlPrefix}${safeId}/embed?start=false&loop=false&delayms=60000`;
+      
+      // Parameter minimal - TANPA cache buster otomatis
+      const params = new URLSearchParams({
+        start: 'false',
+        loop: 'false',
+        delayms: '60000'
+      });
+      
+      // HANYA tambahkan cache buster jika diminta secara eksplisit
+      if (forceRefresh) {
+        params.append('nocache', slideCacheKey);
+      }
+      
+      return `https://docs.google.com/presentation${baseUrlPrefix}${safeId}/embed?${params.toString()}`;
+  };
+
+  // Fungsi untuk refresh slide secara manual (misal: saat login atau ganti slide)
+  const refreshSlide = () => {
+    const newCacheKey = Date.now().toString().slice(-6);
+    setSlideCacheKey(newCacheKey);
+    showNotif("Presentation refreshed!");
   };
 
   const toggleFullScreen = async (ref) => {
@@ -364,9 +454,10 @@ export default function App() {
       }
       if (params.action === 'setSlideId') { localStorage.setItem('demo_slide_id', params.slideId); return { result: "success", slideId: params.slideId }; }
       if (params.action === 'getStatus' || params.action === 'getAllUsers') {
-          return { result: "success", users: [{userId: 'd1', name: 'Demo User', username: 'demo', step: 1, status: 'PENDING'}], slideId: DEFAULT_SLIDE_ID, step: 1, status: 'PENDING' };
+          return { result: "success", users: [{userId: 'd1', name: 'Demo User', username: 'demo', step: 1, status: 'PENDING', answer: 'Jawaban demo'}], slideId: DEFAULT_SLIDE_ID, step: 1, status: 'PENDING' };
       }
-      if (params.action === 'login') return { result: "success", userId: "DEMO_USER", username: "demo", name: "Siswa Demo", step: 1, status: "PENDING", slideId: DEFAULT_SLIDE_ID };
+      if (params.action === 'login') return { result: "success", userId: "DEMO_USER", username: "demo", name: "Siswa Demo", step: 1, status: "PENDING", slideId: DEFAULT_SLIDE_ID, answer: '' };
+      if (params.action === 'request_revision') return { result: "success" };
       return { result: "success" };
   };
 
@@ -420,11 +511,69 @@ export default function App() {
       else { showNotif("Gagal menyimpan materi."); }
   };
 
+  // PERBAIKAN: useEffect awal
   useEffect(() => {
     const savedUser = localStorage.getItem('workshop_user');
-    if (savedUser) { try { setUserData(JSON.parse(savedUser)); setView('student'); } catch(e){} fetchMaterials(); }
+    const savedSlideId = localStorage.getItem('workshop_slide_id');
+    
+    // Set slide loading true di awal
+    setSlideLoading(true);
+    
+    if (savedUser) { 
+      try { 
+        const parsed = JSON.parse(savedUser);
+        setUserData(parsed); 
+        
+        // Jika ada slide ID yang disimpan, gunakan itu
+        if (savedSlideId) {
+          setCurrentSlideId(savedSlideId);
+          // Refresh slide saat login pertama kali
+          refreshSlide();
+          setTimeout(() => {
+            setSlideReady(true);
+            setSlideLoading(false);
+          }, 100);
+        } else {
+          setTimeout(() => {
+            setSlideReady(true);
+            setSlideLoading(false);
+          }, 300);
+        }
+        
+        setView('student'); 
+        fetchMaterials(); 
+      } catch(e){
+        console.error("Error loading saved user:", e);
+        setSlideLoading(false);
+      }
+    }
+    
     const savedInstructor = sessionStorage.getItem('workshop_instructor_session');
-    if (savedInstructor) { try { setActiveInstructorSession(JSON.parse(savedInstructor)); } catch(e){} }
+    if (savedInstructor) { 
+      try { 
+        setActiveInstructorSession(JSON.parse(savedInstructor)); 
+        
+        // Untuk instruktur, fetch slide ID dari server
+        const fetchInstructorSlide = async () => {
+          const res = await callAPI({ action: 'getAllUsers' });
+          if (res && res.result === 'success' && res.slideId) {
+            setCurrentSlideId(res.slideId);
+            localStorage.setItem('workshop_slide_id', res.slideId);
+            // Refresh slide untuk instruktur juga
+            refreshSlide();
+          }
+          setSlideReady(true);
+          setSlideLoading(false);
+        };
+        
+        fetchInstructorSlide();
+        setView('instructor_dashboard'); 
+      } catch(e){
+        console.error("Error loading instructor session:", e);
+        setSlideLoading(false);
+      } 
+    }
+    
     const savedLockout = localStorage.getItem('login_lockout_until');
     if (savedLockout && new Date().getTime() < parseInt(savedLockout)) setLockoutTime(parseInt(savedLockout));
     const savedSheetId = localStorage.getItem('workshop_target_sheet_id');
@@ -447,8 +596,23 @@ export default function App() {
           sessionStorage.setItem('workshop_instructor_session', JSON.stringify(session));
           setInstructorUsername(""); setInstructorPass(""); setLoginAttempts(0);
           fetchMaterials();
-          if (loginTarget === 'dashboard') { setView('instructor_dashboard'); showNotif(`Selamat datang, ${res.name}`); }
-          else if (loginTarget === 'settings') { setView('admin_settings'); showNotif('Masuk ke Pengaturan Admin'); }
+          
+          // Ambil slide ID untuk instruktur
+          setSlideLoading(true);
+          const slideRes = await callAPI({ action: 'getAllUsers' });
+          if (slideRes && slideRes.result === 'success' && slideRes.slideId) {
+            setCurrentSlideId(slideRes.slideId);
+            localStorage.setItem('workshop_slide_id', slideRes.slideId);
+            // Refresh slide setelah login
+            refreshSlide();
+          }
+          
+          setTimeout(() => {
+            setSlideReady(true);
+            setSlideLoading(false);
+            if (loginTarget === 'dashboard') { setView('instructor_dashboard'); showNotif(`Selamat datang, ${res.name}`); }
+            else if (loginTarget === 'settings') { setView('admin_settings'); showNotif('Masuk ke Pengaturan Admin'); }
+          }, 300);
       } else {
           const newAttempts = loginAttempts + 1; setLoginAttempts(newAttempts);
           if (newAttempts >= 5) { 
@@ -482,22 +646,67 @@ export default function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!authInput.username) { showNotif("Username wajib diisi!"); return; }
+    
+    setSlideLoading(true); // Set loading true sebelum request
+    setSlideError(false);
+    setSlideReady(false);
+    
     const action = authMode === 'register' ? 'register' : 'login';
     const payload = authMode === 'register' ? { action, username: authInput.username, name: authInput.name } : { action, username: authInput.username };
+    
     const res = await callAPI(payload);
+    
     if (res && res.result === 'success') {
-        const userObj = { userId: res.userId, username: res.username, name: res.name, step: res.step, status: res.status };
+        const userObj = { 
+          userId: res.userId, 
+          username: res.username, 
+          name: res.name, 
+          step: res.step, 
+          status: res.status,
+          answer: res.answer || ''
+        };
         setUserData(userObj);
-        if (res.slideId) setCurrentSlideId(res.slideId);
-        fetchMaterials(); localStorage.setItem('workshop_user', JSON.stringify(userObj)); setView('student');
-    } else { showNotif(String(res?.message || "Gagal login.")); }
+        
+        // SIMPAN SLIDE ID KE CACHE
+        if (res.slideId) {
+            setCurrentSlideId(res.slideId);
+            localStorage.setItem('workshop_slide_id', res.slideId);
+            // Refresh slide saat login pertama kali
+            refreshSlide();
+        }
+        
+        fetchMaterials(); 
+        localStorage.setItem('workshop_user', JSON.stringify(userObj)); 
+        
+        // Tunggu state terupdate sebelum render slide
+        setTimeout(() => {
+          setSlideReady(true);
+          setSlideLoading(false);
+          setView('student');
+        }, 300);
+        
+    } else { 
+        showNotif(String(res?.message || "Gagal login.")); 
+        setSlideLoading(false);
+        setSlideReady(false);
+    }
   };
 
   const requestLogout = () => setShowLogoutConfirm(true);
   const confirmLogout = () => {
-      localStorage.removeItem('workshop_user'); sessionStorage.removeItem('workshop_instructor_session');
-      setActiveInstructorSession(null); setUserData({ name: '', username: '', userId: '', step: 1, status: 'PENDING' });
-      setAuthInput({ username: '', name: '' }); setView('auth'); setShowLogoutConfirm(false); setIsOfflineMode(false);
+      localStorage.removeItem('workshop_user'); 
+      localStorage.removeItem('workshop_slide_id');
+      sessionStorage.removeItem('workshop_instructor_session');
+      setActiveInstructorSession(null); 
+      setUserData({ name: '', username: '', userId: '', step: 1, status: 'PENDING', answer: '' });
+      setAuthInput({ username: '', name: '' }); 
+      setCurrentSlideId(null);
+      setSlideReady(false);
+      setSlideLoading(true);
+      setSlideCacheKey(Date.now().toString().slice(-6)); // Reset cache key
+      setView('auth'); 
+      setShowLogoutConfirm(false); 
+      setIsOfflineMode(false);
   };
 
   const copyScriptToClipboard = () => {
@@ -509,45 +718,99 @@ export default function App() {
       document.body.removeChild(textArea);
   };
 
-  // --- SYNC LOGIC ---
+  // --- SYNC LOGIC OPTIMIZED untuk mencegah slide flicker ---
   useEffect(() => {
     let interval;
     if (view === 'student') {
       const poll = async () => {
           if (!userData.userId) return;
+          
           const res = await callAPI({ action: 'getStatus', userId: userData.userId });
           if (res && res.result === 'success') {
-              setUserData(prev => ({ ...prev, step: res.step, status: res.status }));
-              if (res.slideId && res.slideId !== currentSlideId) setCurrentSlideId(res.slideId);
-              if (res.status === 'APPROVED' && res.step > userData.step) showNotif("Anda telah di-approve!");
+              // Hanya update state jika ada perubahan nyata
+              const stepChanged = res.step !== userData.step;
+              const statusChanged = res.status !== userData.status;
+              
+              if (stepChanged || statusChanged) {
+                  setUserData(prev => ({ 
+                      ...prev, 
+                      step: res.step, 
+                      status: res.status 
+                  }));
+                  
+                  if (statusChanged) {
+                      if (res.status === 'APPROVED' && res.step > userData.step) showNotif("Anda telah di-approve!");
+                      if (res.status === 'NEED_REVISION' && userData.status !== 'NEED_REVISION') showNotif("Instruktur meminta revisi jawaban Anda!");
+                  }
+              }
+              
+              // HANYA update slideId jika benar-benar berbeda
+              if (res.slideId && res.slideId !== currentSlideId) {
+                  setCurrentSlideId(res.slideId);
+                  localStorage.setItem('workshop_slide_id', res.slideId);
+                  // Refresh slide saat slide ID berubah
+                  refreshSlide();
+                  showNotif("Presentation updated!");
+              }
           }
       };
-      poll(); interval = setInterval(poll, 5000);
+      poll(); 
+      interval = setInterval(poll, 5000);
     }
+    
     if (view === 'instructor_dashboard') {
       const fetchInstr = async () => {
         const res = await callAPI({ action: 'getAllUsers' });
         if (res && res.result === 'success') {
-          if (Array.isArray(res.users)) { setInstructorData(Array.from(new Map(res.users.map(item => [item.userId, item])).values())); } 
-          else { setInstructorData([]); }
-          if (res.slideId) setCurrentSlideId(res.slideId);
+          // Simpan data lama untuk perbandingan
+          const oldData = instructorData;
+          
+          if (Array.isArray(res.users)) { 
+            const newData = Array.from(new Map(res.users.map(item => [item.userId, item])).values());
+            
+            // Hanya update jika ada perubahan
+            const dataChanged = JSON.stringify(oldData) !== JSON.stringify(newData);
+            if (dataChanged) {
+              setInstructorData(newData);
+            }
+          }
+          
+          // HANYA update slideId jika benar-benar berbeda
+          if (res.slideId && res.slideId !== currentSlideId) {
+            setCurrentSlideId(res.slideId);
+            localStorage.setItem('workshop_slide_id', res.slideId);
+            // Refresh slide saat slide ID berubah
+            refreshSlide();
+          }
         }
       };
-      fetchInstr(); interval = setInterval(fetchInstr, 8000);
+      fetchInstr(); 
+      interval = setInterval(fetchInstr, 8000);
     }
     return () => clearInterval(interval);
-  }, [view, userData.userId, userData.step, currentSlideId, isOfflineMode]);
+  }, [view, userData.userId, userData.step, userData.status, currentSlideId, instructorData]);
 
   const updateSlideIdConfig = async () => {
       if (!newSlideIdInput) return showNotif("Masukkan ID Slide");
       let cleanId = newSlideIdInput;
       const match = newSlideIdInput.match(/\/d\/(?:e\/)?([a-zA-Z0-9-_]+)/);
       if (match && match[1]) cleanId = match[1];
+      
+      setSlideLoading(true);
       await callAPI({ action: 'setSlideId', slideId: cleanId });
       setCurrentSlideId(cleanId);
+      localStorage.setItem('workshop_slide_id', cleanId);
+      // Refresh slide saat ID slide diganti
+      refreshSlide();
       setShowSlideConfigModal(false);
+      
+      setTimeout(() => {
+        setSlideLoading(false);
+      }, 300);
+      
       showNotif("Slide Presentation Berhasil Diganti!");
   };
+
   const saveTargetSheetId = () => {
       let cleanId = newTargetSheetId;
       const match = newTargetSheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
@@ -556,15 +819,131 @@ export default function App() {
       localStorage.setItem('workshop_target_sheet_id', cleanId);
       showNotif(cleanId ? "Database dialihkan ke Sheet baru!" : "Menggunakan Database Master (Default).");
   };
-  const approveStudent = async (targetId) => { await callAPI({ action: 'approve', userId: targetId }); showNotif("Siswa Approved."); fetchStudents(); };
-  const handleStudentSubmit = async (answer) => { await callAPI({ action: 'submitTask', userId: userData.userId, answer }); setUserData(prev => ({ ...prev, status: 'WAITING_APPROVAL' })); showNotif("Jawaban terkirim."); };
-  const handleNextLevel = async () => { const nextStep = userData.step + 1; await callAPI({ action: 'updateStep', userId: userData.userId, step: nextStep }); setUserData(prev => ({ ...prev, step: nextStep, status: 'PENDING' })); setStudentInput(""); };
 
-  const handleUpdateMaterial = (field, value) => { setEditingMaterial(prev => ({ ...prev, [field]: value })); };
-  const saveEditingMaterial = () => { const updatedMaterials = materials.map(m => m.id === editingMaterial.id ? editingMaterial : m); setMaterials(updatedMaterials); setEditingMaterial(null); };
+  const approveStudent = async (targetId) => { 
+    await callAPI({ action: 'approve', userId: targetId }); 
+    showNotif("Siswa Approved."); 
+    fetchStudents(); 
+  };
 
-  // --- RENDERERS ---
+  // Fungsi baru untuk request revisi
+  const requestRevision = async (studentId, feedback) => {
+    const res = await callAPI({ 
+        action: 'request_revision', 
+        userId: studentId, 
+        feedback,
+        answer: "REVISION_REQUESTED"
+    });
+    if (res && res.result === 'success') {
+        showNotif("Permintaan revisi dikirim ke siswa.");
+        setShowRevisionModal(false);
+        setRevisionFeedback("");
+        fetchStudents();
+    } else {
+        showNotif(res?.message || "Gagal mengirim permintaan revisi.");
+    }
+  };
 
+  const handleStudentSubmit = async (answer) => { 
+    await callAPI({ action: 'submitTask', userId: userData.userId, answer }); 
+    setUserData(prev => ({ ...prev, status: 'WAITING_APPROVAL' })); 
+    showNotif("Jawaban terkirim."); 
+  };
+
+  const handleNextLevel = async () => { 
+    const nextStep = userData.step + 1; 
+    await callAPI({ action: 'updateStep', userId: userData.userId, step: nextStep }); 
+    setUserData(prev => ({ ...prev, step: nextStep, status: 'PENDING' })); 
+    setStudentInput(""); 
+  };
+
+  const handleUpdateMaterial = (field, value) => { 
+    setEditingMaterial(prev => ({ ...prev, [field]: value })); 
+  };
+
+  const saveEditingMaterial = () => { 
+    const updatedMaterials = materials.map(m => m.id === editingMaterial.id ? editingMaterial : m); 
+    setMaterials(updatedMaterials); 
+    setEditingMaterial(null); 
+  };
+
+  // --- FITUR TAMBAH STEP/MATERI BARU ---
+  const handleAddNewStep = () => {
+    const newId = materials.length > 0 ? Math.max(...materials.map(m => m.id)) + 1 : 1;
+    const newStep = {
+      id: newId,
+      title: "Step Baru",
+      duration: "15 Menit",
+      icon: "BookOpen",
+      description: "Deskripsi step baru",
+      content: "Konten atau tugas untuk step baru ini"
+    };
+    
+    setMaterials([...materials, newStep]);
+    setEditingMaterial(newStep);
+    showNotif("Step baru telah ditambahkan. Silakan edit kontennya.");
+  };
+
+  const handleDeleteStep = (stepId) => {
+    if (materials.length <= 1) {
+      showNotif("Tidak dapat menghapus satu-satunya step yang ada!");
+      return;
+    }
+    
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus step ini?`)) return;
+    
+    // Jangan izinkan menghapus step yang sedang digunakan siswa
+    const isStepInUse = instructorData.some(student => student.step === stepId);
+    if (isStepInUse) {
+      showNotif("Tidak dapat menghapus step yang sedang digunakan siswa!");
+      return;
+    }
+    
+    const updatedMaterials = materials.filter(m => m.id !== stepId);
+    // Reorder IDs untuk menjaga konsistensi
+    const reorderedMaterials = updatedMaterials.map((m, index) => ({
+      ...m,
+      id: index + 1
+    }));
+    
+    setMaterials(reorderedMaterials);
+    if (editingMaterial && editingMaterial.id === stepId) {
+      setEditingMaterial(null);
+    }
+    showNotif("Step berhasil dihapus!");
+  };
+
+  const handleReorderStep = (stepId, direction) => {
+    const currentIndex = materials.findIndex(m => m.id === stepId);
+    if (currentIndex === -1) return;
+    
+    let newIndex;
+    if (direction === 'up' && currentIndex > 0) {
+      newIndex = currentIndex - 1;
+    } else if (direction === 'down' && currentIndex < materials.length - 1) {
+      newIndex = currentIndex + 1;
+    } else {
+      return;
+    }
+    
+    const updatedMaterials = [...materials];
+    const [movedItem] = updatedMaterials.splice(currentIndex, 1);
+    updatedMaterials.splice(newIndex, 0, movedItem);
+    
+    // Update IDs untuk menjaga urutan
+    const reorderedMaterials = updatedMaterials.map((m, index) => ({
+      ...m,
+      id: index + 1
+    }));
+    
+    setMaterials(reorderedMaterials);
+    if (editingMaterial && editingMaterial.id === stepId) {
+      setEditingMaterial(reorderedMaterials[newIndex]);
+    }
+    showNotif("Urutan step telah diubah!");
+  };
+
+  // --- RENDER AUTH VIEW ---
   if (view === 'recover') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
@@ -572,7 +951,7 @@ export default function App() {
                 <button onClick={() => { setView('auth'); setRecoveredUser(null); }} className="text-gray-500 mb-4 flex items-center gap-2 hover:text-indigo-600 transition"><ArrowLeft size={16}/> Kembali</button>
                 <h2 className="text-2xl font-bold mb-2 text-gray-800">Lupa Username?</h2>
                 {!recoveredUser ? (
-                    <form onSubmit={() => { /* Mock recover */ setRecoveredUser({foundUsername: 'demo', foundName: 'Siswa Demo'}); }} className="space-y-4">
+                    <form onSubmit={() => { setRecoveredUser({foundUsername: 'demo', foundName: 'Siswa Demo'}); }} className="space-y-4">
                         <input type="text" className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white/50 transition" placeholder="Nama Lengkap" value={recoverName} onChange={e => setRecoverName(e.target.value)}/>
                         <button type="button" onClick={async () => {
                              setLoading(true);
@@ -637,7 +1016,7 @@ export default function App() {
     );
   }
 
-  // 3. INSTRUCTOR / ADMIN LOGIN
+  // INSTRUCTOR / ADMIN LOGIN
   if (view === 'instructor_login') {
       return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans" onContextMenu={(e) => e.preventDefault()}>
@@ -672,7 +1051,6 @@ export default function App() {
                     </div>
                 </div>
                 
-                {/* INLINE ERROR DISPLAY */}
                 {loginError && (
                     <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl flex items-start gap-2 text-left animate-fade-in border border-red-100">
                         <AlertCircle size={16} className="mt-0.5 shrink-0"/>
@@ -692,7 +1070,7 @@ export default function App() {
       )
   }
 
-  // 3.6. ADMIN SETTINGS
+  // ADMIN SETTINGS
   if (view === 'admin_settings') {
       const isAdmin = activeInstructorSession?.role === 'ADMIN';
       return (
@@ -748,14 +1126,13 @@ export default function App() {
                             )}
                         </div>
                     )}
-                    {activeSettingsTab === 'monev' && (<div className="flex flex-col items-center justify-center h-64 text-gray-400 text-center"><div className="bg-gray-100 p-4 rounded-full mb-4"><BarChart size={32}/></div><h3 className="font-bold text-gray-600">Monitoring & Evaluasi</h3><p className="text-sm mt-2 max-w-md">Dashboard analitik untuk melihat perkembangan siswa secara keseluruhan dan performa kelas.</p><span className="mt-4 px-3 py-1 bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold">Segera Hadir</span></div>)}
                 </div>
             </main>
         </div>
       );
   }
 
-  // 4. INSTRUCTOR DASHBOARD VIEW
+  // INSTRUCTOR DASHBOARD VIEW dengan fitur revisi
   if (view === 'instructor_dashboard') {
     return (
       <div className="min-h-screen bg-gray-50 font-sans pb-20" onContextMenu={(e) => e.preventDefault()}>
@@ -763,7 +1140,127 @@ export default function App() {
             <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"><h3 className="text-xl font-bold text-gray-900 mb-2">Ganti Slide Presentasi</h3><input type="text" value={newSlideIdInput} onChange={e => setNewSlideIdInput(e.target.value)} placeholder="Contoh: https://docs.google.com/presentation/d/..." className="w-full p-3 border border-gray-300 rounded-lg mb-4 font-mono text-xs"/><div className="flex gap-3"><button onClick={() => setShowSlideConfigModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold">Batal</button><button onClick={updateSlideIdConfig} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">Simpan</button></div></div></div>
         )}
         
-        {/* MODAL EDIT MATERIALS */}
+        {/* MODAL REQUEST REVISION */}
+        {showRevisionModal && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Minta Revisi Jawaban</h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Untuk: <span className="font-bold">{selectedStudentForRevision?.name}</span>
+                    </p>
+                    
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Feedback untuk siswa:
+                        </label>
+                        <textarea 
+                            value={revisionFeedback}
+                            onChange={(e) => setRevisionFeedback(e.target.value)}
+                            className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none resize-none"
+                            placeholder="Berikan penjelasan apa yang perlu diperbaiki siswa..."
+                            autoFocus
+                        />
+                    </div>
+                    
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => {
+                                setShowRevisionModal(false);
+                                setRevisionFeedback("");
+                            }}
+                            className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition"
+                        >
+                            Batal
+                        </button>
+                        <button 
+                            onClick={() => requestRevision(selectedStudentForRevision.userId, revisionFeedback)}
+                            className="flex-1 py-2 bg-yellow-500 text-white rounded-lg font-bold hover:bg-yellow-600 transition flex items-center justify-center gap-2"
+                        >
+                            <Send size={16}/> Kirim Permintaan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL HISTORY JAWABAN */}
+        {showAnswerHistory && selectedStudentHistory && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[80vh] flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900">History Jawaban</h3>
+                            <p className="text-sm text-gray-500">
+                                {selectedStudentHistory.name} (@{selectedStudentHistory.username})
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                setShowAnswerHistory(false);
+                                setSelectedStudentHistory(null);
+                            }}
+                            className="p-2 hover:bg-gray-100 rounded-full transition"
+                        >
+                            <X size={24} className="text-gray-500"/>
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                        {(() => {
+                            const answer = selectedStudentHistory.answer;
+                            if (!answer || answer === '-') {
+                                return <div className="text-center text-gray-400 py-8">Belum ada jawaban</div>;
+                            }
+                            
+                            const parts = answer.split('\n\n--- ');
+                            return parts.map((part, index) => {
+                                if (part.startsWith('FEEDBACK INSTRUKTUR ---\n')) {
+                                    return (
+                                        <div key={index} className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Users size={16} className="text-yellow-600"/>
+                                                <span className="text-sm font-bold text-yellow-700">FEEDBACK INSTRUKTUR</span>
+                                            </div>
+                                            <p className="text-gray-700 whitespace-pre-wrap">
+                                                {part.replace('FEEDBACK INSTRUKTUR ---\n', '')}
+                                            </p>
+                                        </div>
+                                    );
+                                } else if (part.startsWith('REVISI ---\n')) {
+                                    return (
+                                        <div key={index} className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <RefreshCw size={16} className="text-blue-600"/>
+                                                <span className="text-sm font-bold text-blue-700">REVISI SISWA</span>
+                                            </div>
+                                            <p className="text-gray-700 whitespace-pre-wrap italic">
+                                                {part.replace('REVISI ---\n', '')}
+                                            </p>
+                                        </div>
+                                    );
+                                } else {
+                                    return (
+                                        <div key={index} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Send size={16} className="text-gray-600"/>
+                                                <span className="text-sm font-bold text-gray-700">
+                                                    {index === 0 ? 'JAWABAN AWAL' : 'JAWABAN'}
+                                                </span>
+                                            </div>
+                                            <p className="text-gray-700 whitespace-pre-wrap italic">
+                                                {part}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+                            });
+                        })()}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL EDIT MATERIALS dengan fitur tambah step */}
         {showMaterialEditor && (
              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
                 <div className="bg-white rounded-3xl p-8 max-w-5xl w-full h-[85vh] flex flex-col shadow-2xl overflow-hidden">
@@ -772,13 +1269,20 @@ export default function App() {
                             <h3 className="text-2xl font-bold text-gray-900">Edit Materi Workshop</h3>
                             <p className="text-sm text-gray-500">Sesuaikan konten kurikulum untuk kelas ini.</p>
                         </div>
-                        <button onClick={() => { setShowMaterialEditor(false); setEditingMaterial(null); }} className="p-2 hover:bg-gray-100 rounded-full transition"><X size={24} className="text-gray-500"/></button>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={handleAddNewStep}
+                            className="bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-100"
+                          >
+                            <Plus size={16}/> Tambah Step
+                          </button>
+                          <button onClick={() => { setShowMaterialEditor(false); setEditingMaterial(null); }} className="p-2 hover:bg-gray-100 rounded-full transition"><X size={24} className="text-gray-500"/></button>
+                        </div>
                     </div>
                     
                     <div className="flex-1 overflow-hidden flex gap-6">
-                        {/* List Steps */}
-                        <div className="w-1/3 border-r border-gray-100 pr-6 overflow-y-auto space-y-3 custom-scrollbar">
-                             {materials.map((m) => (
+                        <div className="w-1/3 border-r border-gray-100 pr-6 overflow-y-auto space-y-3">
+                             {materials.map((m, index) => (
                                  <div 
                                     key={m.id} 
                                     onClick={() => setEditingMaterial(m)}
@@ -786,15 +1290,52 @@ export default function App() {
                                  >
                                      <div className="flex items-center justify-between mb-2">
                                          <span className={`text-xs font-bold px-2 py-1 rounded-lg ${editingMaterial?.id === m.id ? 'bg-indigo-200 text-indigo-800' : 'bg-gray-100 text-gray-600'}`}>Step {m.id}</span>
-                                         <span className="text-xs text-gray-400 font-medium">{m.duration}</span>
+                                         <div className="flex items-center gap-1">
+                                           <span className="text-xs text-gray-400 font-medium">{m.duration}</span>
+                                           
+                                           {/* Tombol kontrol untuk reorder dan hapus */}
+                                           <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             <button 
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 handleReorderStep(m.id, 'up');
+                                               }}
+                                               disabled={index === 0}
+                                               className={`p-1 rounded ${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                               title="Pindah ke atas"
+                                             >
+                                               <ChevronRight size={12} className="transform -rotate-90"/>
+                                             </button>
+                                             <button 
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 handleReorderStep(m.id, 'down');
+                                               }}
+                                               disabled={index === materials.length - 1}
+                                               className={`p-1 rounded ${index === materials.length - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                               title="Pindah ke bawah"
+                                             >
+                                               <ChevronRight size={12} className="transform rotate-90"/>
+                                             </button>
+                                             <button 
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 handleDeleteStep(m.id);
+                                               }}
+                                               className="p-1 rounded text-gray-500 hover:text-red-600 hover:bg-red-50"
+                                               title="Hapus step"
+                                             >
+                                               <Trash2 size={12}/>
+                                             </button>
+                                           </div>
+                                         </div>
                                      </div>
                                      <h4 className={`font-bold text-sm line-clamp-1 ${editingMaterial?.id === m.id ? 'text-indigo-900' : 'text-gray-700'}`}>{m.title}</h4>
                                  </div>
                              ))}
                         </div>
 
-                        {/* Editor Form */}
-                        <div className="w-2/3 pl-2 overflow-y-auto custom-scrollbar">
+                        <div className="w-2/3 pl-2 overflow-y-auto">
                             {editingMaterial ? (
                                 <div className="space-y-5 animate-fade-in pb-4">
                                     <div className="grid grid-cols-3 gap-5">
@@ -826,16 +1367,23 @@ export default function App() {
                                 <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
                                     <div className="p-4 bg-white rounded-full shadow-sm mb-4"><Edit3 size={32} className="text-indigo-300"/></div>
                                     <p className="text-sm font-medium">Pilih materi di sebelah kiri untuk mulai mengedit</p>
+                                    <p className="text-xs text-gray-400 mt-2">Atau klik "Tambah Step" untuk membuat step baru</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="mt-6 pt-6 border-t border-gray-100 flex justify-end gap-3 shrink-0">
-                         <button onClick={() => setShowMaterialEditor(false)} className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition">Tutup</button>
-                         <button onClick={saveMaterials} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-200 flex items-center gap-2 transition transform active:scale-95">
-                            <Save size={18}/> Simpan Permanen ke Database
-                         </button>
+                    <div className="mt-6 pt-6 border-t border-gray-100 flex justify-between items-center shrink-0">
+                         <div className="text-sm text-gray-500">
+                           <span className="font-bold">{materials.length}</span> step tersedia • 
+                           <span className="ml-2">Gunakan tombol <span className="font-bold text-indigo-600">↑↓</span> untuk mengubah urutan</span>
+                         </div>
+                         <div className="flex gap-3">
+                           <button onClick={() => setShowMaterialEditor(false)} className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition">Tutup</button>
+                           <button onClick={saveMaterials} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-200 flex items-center gap-2 transition transform active:scale-95">
+                              <Save size={18}/> Simpan Permanen ke Database
+                           </button>
+                         </div>
                     </div>
                 </div>
              </div>
@@ -853,6 +1401,7 @@ export default function App() {
               <Monitor size={18} className="text-gray-400 ml-2"/>
               <div className="h-6 w-px bg-gray-300 mx-1"></div>
               <button onClick={() => { setNewSlideIdInput(currentSlideId); setShowSlideConfigModal(true); }} className="hover:bg-white p-2 rounded-lg text-gray-600 hover:text-indigo-600 transition shadow-sm" title="Ganti URL Slide"><Edit3 size={16}/></button>
+              <button onClick={refreshSlide} className="hover:bg-white p-2 rounded-lg text-gray-600 hover:text-indigo-600 transition shadow-sm" title="Refresh Slide"><RefreshCw size={16}/></button>
           </div>
           
           <div className="flex items-center gap-3">
@@ -875,7 +1424,22 @@ export default function App() {
                 <span className="text-xs font-bold pr-1 hidden group-hover:inline-block transition-all">{isExpanded ? 'Keluar' : 'Fullscreen'}</span>
             </button>
             <div ref={instructorSlideRef} className={`bg-gray-900 rounded-xl overflow-hidden relative group transition-all duration-300 ${isExpanded ? 'fixed inset-0 z-[100] w-screen h-screen rounded-none border-0' : 'aspect-video w-full'}`}>
-                <iframe key={currentSlideId} src={getEmbedUrl(currentSlideId)} className="w-full h-full" allowFullScreen={true} title="Slide Preview"/>
+                {slideLoading || !slideReady || !currentSlideId ? (
+                    <SlideSkeleton />
+                ) : (
+                    <iframe 
+                        key={`instructor_slide_${currentSlideId}_${slideCacheKey}`}
+                        src={getEmbedUrl(currentSlideId, false)}
+                        className="w-full h-full" 
+                        allowFullScreen={true} 
+                        title="Slide Preview"
+                        onLoad={() => setSlideLoading(false)}
+                        onError={() => {
+                            setSlideError(true);
+                            setSlideLoading(false);
+                        }}
+                    />
+                )}
             </div>
           </div>
           
@@ -895,48 +1459,134 @@ export default function App() {
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                          {instructorData?.map((student) => (
-                              <tr key={student.userId} className="hover:bg-indigo-50/30 transition group">
-                                  <td className="p-5 align-top">
-                                      <div className="flex items-center gap-3">
-                                          <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm shadow-sm">{student.name.charAt(0)}</div>
-                                          <div>
-                                              <div className="font-bold text-gray-900">{student.name}</div>
-                                              <div className="text-xs text-gray-500 font-mono">@{student.username}</div>
-                                          </div>
-                                      </div>
-                                  </td>
-                                  <td className="p-5 align-top pt-7">
-                                      <div className="relative pt-1">
-                                          <div className="flex mb-2 items-center justify-between">
-                                              <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-100">Step {student.step}</span>
-                                          </div>
-                                          <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-100">
-                                              <div style={{ width: `${(student.step / materials.length) * 100}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500 transition-all duration-500"></div>
-                                          </div>
-                                      </div>
-                                  </td>
-                                  <td className="p-5 align-top pt-6 max-w-xs">
-                                      {student.answer !== '-' ? 
-                                          <div className="text-sm text-gray-600 bg-white border border-gray-200 p-3 rounded-xl shadow-sm italic leading-relaxed relative">
-                                              <div className="absolute -top-2 left-4 w-3 h-3 bg-white border-t border-l border-gray-200 transform rotate-45"></div>
-                                              "{student.answer}"
-                                          </div> : 
-                                          <span className="text-gray-300 text-sm flex items-center gap-1"><Loader size={12} className="animate-spin"/> Menunggu...</span>
-                                      }
-                                  </td>
-                                  <td className="p-5 text-right align-top pt-6">
-                                      {student.status === 'WAITING_APPROVAL' ? 
-                                          <button onClick={() => approveStudent(student.userId)} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 hover:shadow-indigo-200 transition transform active:scale-95 flex items-center gap-2 ml-auto">
-                                              <CheckCircle size={14}/> Approve
-                                          </button> : 
-                                          <span className={`text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 ${student.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500'}`}>
-                                              {student.status === 'APPROVED' && <CheckCircle size={12}/>} {student.status}
-                                          </span>
-                                      }
-                                  </td>
-                              </tr>
-                          ))}
+                          {instructorData?.map((student) => {
+                            const hasFeedback = student.answer && student.answer.includes("--- FEEDBACK INSTRUKTUR ---");
+                            const originalAnswer = hasFeedback ? 
+                                student.answer.split("\n\n--- FEEDBACK INSTRUKTUR ---")[0] : 
+                                student.answer;
+                            const feedbackText = hasFeedback ? 
+                                student.answer.split("\n\n--- FEEDBACK INSTRUKTUR ---")[1] : 
+                                null;
+                            
+                            return (
+                                <tr key={student.userId} className="hover:bg-indigo-50/30 transition group">
+                                    <td className="p-5 align-top">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm shadow-sm">
+                                                {student.name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-gray-900">{student.name}</div>
+                                                <div className="text-xs text-gray-500 font-mono">@{student.username}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="p-5 align-top pt-7">
+                                        <div className="relative pt-1">
+                                            <div className="flex mb-2 items-center justify-between">
+                                                <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-100">
+                                                    Step {student.step}
+                                                </span>
+                                            </div>
+                                            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-100">
+                                                <div style={{ width: `${(student.step / materials.length) * 100}%` }} 
+                                                     className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500 transition-all duration-500">
+                                                </div>
+                                            </div>
+                                            <div className={`text-xs font-bold px-2 py-1 rounded ${student.status === 'NEED_REVISION' ? 'bg-yellow-100 text-yellow-800' : 
+                                                                        student.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                                                                        student.status === 'WAITING_APPROVAL' ? 'bg-blue-100 text-blue-800' :
+                                                                        'bg-gray-100 text-gray-800'}`}>
+                                                {student.status}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="p-5 align-top pt-6 max-w-xs">
+                                        {student.answer !== '-' ? 
+                                            <div className="space-y-3">
+                                                <div className="text-sm text-gray-600 bg-white border border-gray-200 p-3 rounded-xl shadow-sm relative">
+                                                    <div className="absolute -top-2 left-4 w-3 h-3 bg-white border-t border-l border-gray-200 transform rotate-45"></div>
+                                                    <div className="max-h-24 overflow-y-auto">
+                                                        {hasFeedback ? (
+                                                            <div>
+                                                                <div className="text-gray-500 text-xs font-bold mb-1 flex items-center gap-1">
+                                                                    <AlertCircle size={10}/> PERLU REVISI
+                                                                </div>
+                                                                <div className="text-gray-700 italic">
+                                                                    "{originalAnswer?.substring(0, 100) || ''}..."
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="italic">
+                                                                "{student.answer?.substring(0, 120) || ''}..."
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                <button 
+                                                    onClick={() => {
+                                                        setSelectedStudentHistory(student);
+                                                        setShowAnswerHistory(true);
+                                                    }}
+                                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition"
+                                                >
+                                                    <FileText size={12}/> Lihat History Jawaban
+                                                </button>
+                                            </div> : 
+                                            <span className="text-gray-300 text-sm flex items-center gap-1">
+                                                <Loader size={12} className="animate-spin"/> Menunggu...
+                                            </span>
+                                        }
+                                    </td>
+                                    <td className="p-5 text-right align-top pt-6 space-y-2">
+                                        {student.status === 'WAITING_APPROVAL' ? 
+                                            <div className="flex flex-col gap-2">
+                                                <button 
+                                                    onClick={() => approveStudent(student.userId)} 
+                                                    className="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-green-700 shadow-lg shadow-green-100 hover:shadow-green-200 transition transform active:scale-95 flex items-center justify-center gap-2"
+                                                >
+                                                    <CheckCircle size={14}/> Approve
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        setSelectedStudentForRevision(student);
+                                                        setRevisionFeedback("");
+                                                        setShowRevisionModal(true);
+                                                    }}
+                                                    className="bg-yellow-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-yellow-600 shadow-lg shadow-yellow-100 hover:shadow-yellow-200 transition transform active:scale-95 flex items-center justify-center gap-2"
+                                                >
+                                                    <Edit3 size={14}/> Minta Revisi
+                                                </button>
+                                            </div> : 
+                                        student.status === 'NEED_REVISION' ? 
+                                            <div className="space-y-2">
+                                                <div className="text-xs font-bold text-yellow-700 bg-yellow-100 px-3 py-1.5 rounded-lg border border-yellow-200">
+                                                    Menunggu Revisi Siswa
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        setSelectedStudentForRevision(student);
+                                                        setRevisionFeedback(feedbackText || "Perlu perbaikan lebih lanjut.");
+                                                        setShowRevisionModal(true);
+                                                    }}
+                                                    className="text-xs text-yellow-700 hover:text-yellow-900 font-medium flex items-center gap-1 hover:bg-yellow-50 px-2 py-1 rounded transition"
+                                                >
+                                                    <Edit3 size={12}/> Edit Feedback
+                                                </button>
+                                            </div> :
+                                        student.status === 'APPROVED' ? 
+                                            <span className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200 flex items-center gap-1">
+                                                <CheckCircle size={12}/> Approved
+                                            </span> :
+                                            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+                                                {student.status}
+                                            </span>
+                                        }
+                                    </td>
+                                </tr>
+                            )
+                          })}
                       </tbody>
                   </table>
               </div>
@@ -946,11 +1596,18 @@ export default function App() {
     );
   }
 
-  // 5. STUDENT VIEW
+  // STUDENT VIEW dengan fitur revisi
   const currentStepData = materials.find(s => s.id === userData.step) || materials[materials.length - 1];
   const isFinished = userData.step > materials.length;
   const isApproved = userData.status === 'APPROVED';
   const isWaiting = userData.status === 'WAITING_APPROVAL';
+  const needsRevision = userData.status === 'NEED_REVISION';
+  
+  // Parse feedback jika ada
+  const hasFeedback = userData.answer && userData.answer.includes("--- FEEDBACK INSTRUKTUR ---");
+  const feedbackText = hasFeedback ? 
+      userData.answer.split("\n\n--- FEEDBACK INSTRUKTUR ---")[1] : 
+      null;
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
@@ -967,7 +1624,7 @@ export default function App() {
         />
       )}
 
-      {/* SIDEBAR NAVIGATION (DRAWER ON MOBILE) */}
+      {/* SIDEBAR NAVIGATION */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
         md:relative md:translate-x-0
@@ -981,20 +1638,18 @@ export default function App() {
                     <p className="text-xs text-gray-500 font-mono">@{userData.username}</p>
                 </div>
             </div>
-            {/* Close Button for Mobile */}
             <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-gray-700 transition bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
                 <X size={20} />
             </button>
         </div>
         
-        {/* Logout Button inside Sidebar */}
         <div className="px-6 py-4">
             <button onClick={requestLogout} className="text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 flex items-center justify-center gap-2 py-3 rounded-xl w-full transition border border-red-100">
                 <LogOut size={14}/> Logout
             </button>
         </div>
 
-        <div className="px-4 pb-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="px-4 pb-4 space-y-2 flex-1 overflow-y-auto">
             <h3 className="px-2 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Kurikulum</h3>
             {materials.map((step) => { 
                 const isCurrent = userData?.step === step.id; 
@@ -1016,7 +1671,6 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden md:static relative bg-gray-50">
-        {/* MOBILE HEADER (Only visible on small screens) */}
         <div className="md:hidden h-16 bg-white/80 backdrop-blur-md border-b flex items-center justify-between px-4 shrink-0 z-30 shadow-sm sticky top-0">
             <div className="flex items-center gap-2 font-bold text-gray-800">
                 <div className="bg-indigo-600 p-1.5 rounded-lg text-white"><Rocket size={16}/></div>
@@ -1027,13 +1681,52 @@ export default function App() {
             </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto">
           <div ref={studentSlideRef} className={`bg-gray-900 shadow-2xl relative shrink-0 group transition-all duration-300 ${isExpanded ? 'fixed inset-0 z-[100] w-screen h-screen' : 'aspect-video w-full md:max-h-64 lg:max-h-80'}`}>
-             <iframe key={currentSlideId} src={getEmbedUrl(currentSlideId)} className="w-full h-full" allowFullScreen={true} title="Live Presentation"/>
-             <button onClick={() => toggleFullScreen(studentSlideRef)} className="absolute bottom-4 right-4 bg-white/10 text-white p-2.5 rounded-xl hover:bg-indigo-600 backdrop-blur-md border border-white/20 transition opacity-0 group-hover:opacity-100 flex items-center gap-2" title="Layar Penuh">
+            {slideLoading || !slideReady || !currentSlideId ? (
+              <SlideSkeleton />
+            ) : slideError ? (
+              <div className="w-full h-full bg-gray-900 flex items-center justify-center text-gray-400">
+                <div className="text-center">
+                  <AlertTriangle size={48} className="mx-auto mb-4 text-yellow-500" />
+                  <p>Unable to load presentation</p>
+                  <button 
+                    onClick={() => {
+                      setSlideError(false);
+                      setSlideLoading(true);
+                      setTimeout(() => {
+                        setSlideLoading(false);
+                        setSlideReady(true);
+                      }, 500);
+                    }}
+                    className="mt-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <iframe 
+                key={`student_slide_${currentSlideId}_${slideCacheKey}`}
+                src={getEmbedUrl(currentSlideId, false)}
+                className="w-full h-full" 
+                allowFullScreen={true} 
+                title="Live Presentation"
+                onLoad={() => {
+                  setSlideLoading(false);
+                  setSlideError(false);
+                }}
+                onError={() => {
+                  setSlideError(true);
+                  setSlideLoading(false);
+                }}
+              />
+            )}
+            
+            <button onClick={() => toggleFullScreen(studentSlideRef)} className="absolute bottom-4 right-4 bg-white/10 text-white p-2.5 rounded-xl hover:bg-indigo-600 backdrop-blur-md border border-white/20 transition opacity-0 group-hover:opacity-100 flex items-center gap-2" title="Layar Penuh">
                 {isExpanded ? <Minimize size={20}/> : <Maximize size={20}/>}
                 {isExpanded && <span className="text-xs font-bold pr-1">Keluar</span>}
-             </button>
+            </button>
           </div>
 
           <div className="p-6 md:p-8 max-w-5xl mx-auto pb-24">
@@ -1045,7 +1738,8 @@ export default function App() {
                             <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mt-3 leading-tight">{currentStepData?.title}</h1>
                         </div>
                         <div className="text-gray-500 text-sm font-medium flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
-                            <ClockIcon duration={currentStepData?.duration}/>
+                            <Clock size={16} className="text-gray-400"/>
+                            <span>{currentStepData?.duration}</span>
                         </div>
                     </div>
                     
@@ -1054,28 +1748,66 @@ export default function App() {
                         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><BookOpen size={20} className="text-indigo-500"/> Instruksi</h3>
                         <p className="text-gray-600 mb-8 leading-relaxed text-lg">{currentStepData?.content}</p>
                         
-                        <div className={`p-6 rounded-2xl border transition-all duration-300 ${isApproved ? 'bg-green-50 border-green-100' : isWaiting ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className={`p-6 rounded-2xl border transition-all duration-300 ${isApproved ? 'bg-green-50 border-green-100' : 
+                                                                                         needsRevision ? 'bg-yellow-50 border-yellow-100' : 
+                                                                                         isWaiting ? 'bg-blue-50 border-blue-100' : 
+                                                                                         'bg-gray-50 border-gray-200'}`}>
                             <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2 uppercase tracking-wide">
-                                <Send size={16} className={isApproved ? "text-green-600" : "text-indigo-600"}/> 
-                                {isApproved ? "Jawaban Anda (Disetujui)" : "Kirim Jawaban / Link"}
+                                <Send size={16} className={isApproved ? "text-green-600" : 
+                                                              needsRevision ? "text-yellow-600" : 
+                                                              "text-indigo-600"}/> 
+                                {isApproved ? "Jawaban Anda (Disetujui)" : 
+                                 needsRevision ? "Revisi Diperlukan" : 
+                                 "Kirim Jawaban / Link"}
                             </label>
+                            
+                            {/* Tampilkan feedback instruktur jika perlu revisi */}
+                            {needsRevision && feedbackText && (
+                                <div className="mb-4 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded-r-lg">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <AlertTriangle size={16} className="text-yellow-600"/>
+                                        <span className="font-bold text-yellow-800">Feedback Instruktur:</span>
+                                    </div>
+                                    <p className="text-yellow-700 whitespace-pre-wrap">
+                                        {feedbackText}
+                                    </p>
+                                </div>
+                            )}
+                            
                             <textarea 
                                 value={studentInput} 
                                 onChange={(e) => setStudentInput(e.target.value)} 
-                                disabled={isApproved || isWaiting} 
-                                className={`w-full h-32 p-4 border rounded-xl focus:ring-4 outline-none transition text-gray-700 font-medium resize-none ${isApproved ? 'bg-white border-green-200 focus:ring-green-100' : 'bg-white border-gray-200 focus:ring-indigo-100 focus:border-indigo-500'}`} 
-                                placeholder={isApproved ? "Jawaban Anda telah dikunci." : "Ketikan jawaban atau paste link hasil kerja di sini..."}
+                                disabled={isApproved} 
+                                className={`w-full h-32 p-4 border rounded-xl focus:ring-4 outline-none transition text-gray-700 font-medium resize-none ${isApproved ? 'bg-white border-green-200 focus:ring-green-100' : 
+                                                                                                                                         needsRevision ? 'bg-white border-yellow-200 focus:ring-yellow-100 focus:border-yellow-500' : 
+                                                                                                                                         'bg-white border-gray-200 focus:ring-indigo-100 focus:border-indigo-500'}`} 
+                                placeholder={isApproved ? "Jawaban Anda telah dikunci." : 
+                                         needsRevision ? "Silakan perbaiki jawaban berdasarkan feedback di atas..." : 
+                                         "Ketikan jawaban atau paste link hasil kerja di sini..."}
                             />
                             
                             <div className="flex flex-col md:flex-row justify-between items-center mt-4 gap-4">
-                                <div className={`px-4 py-2 rounded-lg flex items-center gap-2 border ${isApproved ? 'bg-white text-green-700 border-green-200 shadow-sm' : isWaiting ? 'bg-white text-blue-700 border-blue-200 shadow-sm' : 'bg-gray-200 text-gray-500 border-transparent'}`}>
-                                    {isApproved ? <CheckCircle size={16}/> : isWaiting ? <Loader size={16} className="animate-spin"/> : <HelpCircle size={16}/>}
-                                    <span className="text-xs font-extrabold tracking-wide">{isApproved ? 'STATUS: DISETUJUI' : isWaiting ? 'STATUS: MENUNGGU REVIEW' : 'STATUS: BELUM DIKIRIM'}</span>
+                                <div className={`px-4 py-2 rounded-lg flex items-center gap-2 border ${isApproved ? 'bg-white text-green-700 border-green-200 shadow-sm' : 
+                                                                                           needsRevision ? 'bg-white text-yellow-700 border-yellow-200 shadow-sm' : 
+                                                                                           isWaiting ? 'bg-white text-blue-700 border-blue-200 shadow-sm' : 
+                                                                                           'bg-gray-200 text-gray-500 border-transparent'}`}>
+                                    {isApproved ? <CheckCircle size={16}/> : 
+                                     needsRevision ? <AlertTriangle size={16} className="text-yellow-500"/> : 
+                                     isWaiting ? <Loader size={16} className="animate-spin"/> : <HelpCircle size={16}/>}
+                                    <span className="text-xs font-extrabold tracking-wide">
+                                        {isApproved ? 'STATUS: DISETUJUI' : 
+                                         needsRevision ? 'STATUS: PERLU REVISI' : 
+                                         isWaiting ? 'STATUS: MENUNGGU REVIEW' : 'STATUS: BELUM DIKIRIM'}
+                                    </span>
                                 </div>
                                 
                                 {isApproved ? (
                                     <button onClick={handleNextLevel} className="w-full md:w-auto bg-green-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-green-700 flex items-center justify-center gap-2 shadow-lg shadow-green-200 transform hover:-translate-y-1 transition text-sm">
                                         Lanjut Materi Berikutnya <ChevronRight size={18}/>
+                                    </button>
+                                ) : needsRevision ? (
+                                    <button onClick={() => handleStudentSubmit(studentInput)} disabled={!studentInput} className="w-full md:w-auto bg-yellow-500 text-white px-8 py-3 rounded-xl font-bold hover:bg-yellow-600 flex items-center justify-center gap-2 shadow-lg shadow-yellow-200 transform active:scale-95 text-sm">
+                                        <RefreshCw size={16}/> Kirim Revisi
                                     </button>
                                 ) : (
                                     <button onClick={() => handleStudentSubmit(studentInput)} disabled={!studentInput || isWaiting} className="w-full md:w-auto bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-200 transform active:scale-95 text-sm flex items-center justify-center gap-2">
@@ -1105,13 +1837,3 @@ export default function App() {
     </div>
   );
 }
-
-// Simple Clock Icon Component for Display
-const ClockIcon = ({ duration }) => (
-    <>
-        <div className="w-4 h-4 rounded-full border-2 border-gray-400 flex items-center justify-center relative">
-            <div className="w-0.5 h-1.5 bg-gray-400 absolute bottom-1.5 left-1.5 transform translate-x-[-50%] origin-bottom"></div>
-        </div>
-        <span>{duration}</span>
-    </>
-);
