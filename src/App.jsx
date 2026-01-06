@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BookOpen, CheckCircle, Lock, Unlock, Code, Send, Play, Award, ChevronRight, Menu, X, Rocket, Users, RefreshCw, Loader, LogOut, User, Monitor, ArrowLeft, ArrowRight, HelpCircle, Edit3, Save, WifiOff, Copy, FileJson, Eye, EyeOff, Settings, ShieldCheck, BarChart, UserPlus, Home, LayoutGrid, Wrench, Database, Key, Trash2, AlertTriangle, UserCog, AlertCircle, FileText, Maximize, Minimize, Clock, Plus } from 'lucide-react';
 
 // --- KONFIGURASI UTAMA ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzyJS4tL4U6mA6GCHO09FeLf4D8ziL5IqLOSTgNMIuuf8mPcLWC5mxwpsGT5DmCSZt1mw/exec"; 
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMOAYLqlQzpIPTKUlIVLM8eYEDwpSbhlRYSAbSgIYOlJdJx3lV0WXj1tDNrQW-0CKv_Q/exec"; 
 const DEFAULT_SLIDE_ID = "";
 
 // --- SECURITY UTILS ---
@@ -211,6 +211,24 @@ function handleRequest(e) {
        const data = sheet.getDataRange().getValues();
        for (let i = data.length - 1; i >= 0; i--) { if (data[i][1] == userId) { sheet.getRange(i + 1, 6).setValue("APPROVED"); return jsonResponse({ result: "success" }); } }
     }
+    
+    // --- FITUR HAPUS PESERTA BARU ---
+    if (action === "deleteStudent") {
+      const userId = params.userId;
+      const data = sheet.getDataRange().getValues();
+      
+      for (let i = data.length - 1; i >= 0; i--) { 
+        if (data[i][1] == userId) { 
+          sheet.deleteRow(i + 1); 
+          return jsonResponse({ result: "success" }); 
+        } 
+      }
+      
+      return jsonResponse({ 
+        result: "error", 
+        message: "User not found" 
+      });
+    }
 
   } catch (e) { return jsonResponse({ result: "error", error: e.toString() }); } 
   finally { lock.releaseLock(); }
@@ -348,6 +366,10 @@ export default function App() {
   // --- STATE BARU UNTUK FITUR KUNCI SLIDE ---
   const [slideLocked, setSlideLocked] = useState(true); // Default: terkunci
 
+  // --- STATE BARU UNTUK FITUR HAPUS PESERTA ---
+  const [showDeleteStudentModal, setShowDeleteStudentModal] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState(null);
+
   const studentSlideRef = useRef(null);
   const instructorSlideRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -483,6 +505,14 @@ export default function App() {
       if (params.action === 'getSlideLock') { 
         const locked = localStorage.getItem('slide_locked') !== 'false'; 
         return { result: 'success', locked: locked }; 
+      }
+
+      // --- TAMBAHKAN HANDLER UNTUK FITUR HAPUS PESERTA ---
+      if (params.action === 'deleteStudent') {
+        const mockUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
+        const newUsers = mockUsers.filter(user => user.userId !== params.userId);
+        localStorage.setItem('mock_users', JSON.stringify(newUsers));
+        return { result: 'success' };
       }
 
       if (params.action === 'auth_instructor') {
@@ -950,6 +980,39 @@ export default function App() {
     fetchStudents(); 
   };
 
+  // --- FUNGSI BARU: HAPUS PESERTA ---
+  const confirmDeleteStudent = (student) => {
+    setStudentToDelete(student);
+    setShowDeleteStudentModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!studentToDelete) return;
+    
+    setLoading(true);
+    try {
+      const res = await callAPI({ 
+        action: 'deleteStudent', 
+        userId: studentToDelete.userId 
+      });
+      
+      if (res && res.result === 'success') {
+        showNotif(`Siswa ${studentToDelete.name} berhasil dihapus!`);
+        // Update local state tanpa perlu fetch ulang
+        setInstructorData(prev => prev.filter(s => s.userId !== studentToDelete.userId));
+      } else {
+        showNotif(res?.message || "Gagal menghapus siswa");
+      }
+    } catch (error) {
+      showNotif("Error menghapus siswa");
+      console.error("Delete error:", error);
+    } finally {
+      setLoading(false);
+      setShowDeleteStudentModal(false);
+      setStudentToDelete(null);
+    }
+  };
+
   // Fungsi baru untuk request revisi
   const requestRevision = async (studentId, feedback) => {
     const res = await callAPI({ 
@@ -1256,7 +1319,7 @@ export default function App() {
       );
   }
 
-  // INSTRUCTOR DASHBOARD VIEW dengan fitur revisi dan fitur kunci slide
+  // INSTRUCTOR DASHBOARD VIEW dengan fitur revisi, fitur kunci slide, dan FITUR HAPUS PESERTA
   if (view === 'instructor_dashboard') {
     return (
       <div className="min-h-screen bg-gray-50 font-sans pb-20" onContextMenu={(e) => e.preventDefault()}>
@@ -1382,6 +1445,65 @@ export default function App() {
                     </div>
                 </div>
             </div>
+        )}
+
+        {/* MODAL KONFIRMASI HAPUS PESERTA BARU */}
+        {showDeleteStudentModal && studentToDelete && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle size={24} className="text-red-600"/>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Hapus Peserta</h3>
+                  <p className="text-sm text-gray-500">Aksi ini tidak dapat dibatalkan</p>
+                </div>
+              </div>
+              
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                <p className="text-red-700 font-medium">
+                  Anda akan menghapus:
+                </p>
+                <div className="mt-2">
+                  <p className="text-lg font-bold text-gray-900">{studentToDelete.name}</p>
+                  <p className="text-sm text-gray-500">@{studentToDelete.username}</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Step: {studentToDelete.step} • Status: {studentToDelete.status}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setShowDeleteStudentModal(false);
+                    setStudentToDelete(null);
+                  }}
+                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleConfirmDelete}
+                  disabled={loading}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader size={16} className="animate-spin"/>
+                      Menghapus...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16}/>
+                      Ya, Hapus
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* MODAL EDIT MATERIALS dengan fitur tambah step */}
@@ -1701,6 +1823,13 @@ export default function App() {
                                                 >
                                                     <Edit3 size={14}/> Minta Revisi
                                                 </button>
+                                                <button 
+                                                    onClick={() => confirmDeleteStudent(student)}
+                                                    className="text-xs text-gray-500 hover:text-red-600 font-medium flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition"
+                                                    title="Hapus siswa dari sistem"
+                                                >
+                                                    <Trash2 size={12}/> Hapus
+                                                </button>
                                             </div> : 
                                         student.status === 'NEED_REVISION' ? 
                                             <div className="space-y-2">
@@ -1717,14 +1846,39 @@ export default function App() {
                                                 >
                                                     <Edit3 size={12}/> Edit Feedback
                                                 </button>
+                                                <button 
+                                                    onClick={() => confirmDeleteStudent(student)}
+                                                    className="text-xs text-gray-500 hover:text-red-600 font-medium flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition"
+                                                    title="Hapus siswa dari sistem"
+                                                >
+                                                    <Trash2 size={12}/> Hapus
+                                                </button>
                                             </div> :
                                         student.status === 'APPROVED' ? 
-                                            <span className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200 flex items-center gap-1">
-                                                <CheckCircle size={12}/> Approved
-                                            </span> :
-                                            <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
-                                                {student.status}
-                                            </span>
+                                            <div className="space-y-2">
+                                                <span className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200 flex items-center gap-1">
+                                                    <CheckCircle size={12}/> Approved
+                                                </span>
+                                                <button 
+                                                    onClick={() => confirmDeleteStudent(student)}
+                                                    className="text-xs text-gray-500 hover:text-red-600 font-medium flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition"
+                                                    title="Hapus siswa dari sistem"
+                                                >
+                                                    <Trash2 size={12}/> Hapus
+                                                </button>
+                                            </div> :
+                                            <div className="space-y-2">
+                                                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+                                                    {student.status}
+                                                </span>
+                                                <button 
+                                                    onClick={() => confirmDeleteStudent(student)}
+                                                    className="text-xs text-gray-500 hover:text-red-600 font-medium flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition"
+                                                    title="Hapus siswa dari sistem"
+                                                >
+                                                    <Trash2 size={12}/> Hapus
+                                                </button>
+                                            </div>
                                         }
                                     </td>
                                 </tr>
