@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BookOpen, CheckCircle, Lock, Unlock, Code, Send, Play, Award, ChevronRight, Menu, X, Rocket, Users, RefreshCw, Loader, LogOut, User, Monitor, ArrowLeft, ArrowRight, HelpCircle, Edit3, Save, WifiOff, Copy, FileJson, Eye, EyeOff, Settings, ShieldCheck, BarChart, UserPlus, Home, LayoutGrid, Wrench, Database, Key, Trash2, AlertTriangle, UserCog, AlertCircle, FileText, Maximize, Minimize, Clock, Plus } from 'lucide-react';
 
 // --- KONFIGURASI UTAMA ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwiQJfU_v_hiLwDb47qpWa-M2Tla7EZ2s_vtUOIpcvp-LX_JK3pl4By3UDUEsOorkuo/exec"; 
-const DEFAULT_SLIDE_ID = "1q1MUsZ68LoyRWubLgX9WIkcjBFLq9_8Zze25fv4etcU";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzyJS4tL4U6mA6GCHO09FeLf4D8ziL5IqLOSTgNMIuuf8mPcLWC5mxwpsGT5DmCSZt1mw/exec"; 
+const DEFAULT_SLIDE_ID = "";
 
 // --- SECURITY UTILS ---
 const secureEncode = (str) => {
@@ -14,7 +14,7 @@ const secureEncode = (str) => {
     }
 };
 
-// --- BACKEND CODE ---
+// --- BACKEND CODE DISPLAY ---
 const BACKEND_CODE_DISPLAY = `
 // --- COPY KODE INI KE GOOGLE APPS SCRIPT ---
 
@@ -114,12 +114,23 @@ function handleRequest(e) {
     if (action === "getMaterials") { const stored = scriptProps.getProperty("WORKSHOP_MATERIALS"); return jsonResponse({ result: "success", data: stored ? JSON.parse(stored) : null }); }
     if (action === "setSlideId") { scriptProps.setProperty("SLIDE_ID", params.slideId); return jsonResponse({ result: "success" }); }
     
+    // --- FITUR KUNCI SLIDE BARU ---
+    if (action === "setSlideLock") { 
+        scriptProps.setProperty("SLIDE_LOCKED", params.locked); 
+        return jsonResponse({ result: "success" }); 
+    }
+    if (action === "getSlideLock") { 
+        const locked = scriptProps.getProperty("SLIDE_LOCKED") || "true"; 
+        return jsonResponse({ result: "success", locked: locked === "true" }); 
+    }
+    
     if (action === "getAllUsers") {
       const data = sheet.getDataRange().getValues();
       const users = [];
       let currentSlideId = scriptProps.getProperty("SLIDE_ID") || "";
+      let slideLocked = scriptProps.getProperty("SLIDE_LOCKED") || "true";
       for (let i = 1; i < data.length; i++) if (data[i][1]) users.push({ userId: data[i][1], username: data[i][2], name: data[i][3], step: data[i][4], status: data[i][5], answer: data[i][6] || "-" });
-      return jsonResponse({ result: "success", users: users, slideId: currentSlideId });
+      return jsonResponse({ result: "success", users: users, slideId: currentSlideId, slideLocked: slideLocked === "true" });
     }
     
     if (action === "register") {
@@ -129,13 +140,15 @@ function handleRequest(e) {
         const userId = "USER_" + new Date().getTime();
         sheet.appendRow([new Date(), userId, username, params.name, 1, "PENDING", ""]);
         let currentSlideId = scriptProps.getProperty("SLIDE_ID") || "";
-        return jsonResponse({ result: "success", userId: userId, username: username, name: params.name, step: 1, status: "PENDING", slideId: currentSlideId });
+        let slideLocked = scriptProps.getProperty("SLIDE_LOCKED") || "true";
+        return jsonResponse({ result: "success", userId: userId, username: username, name: params.name, step: 1, status: "PENDING", slideId: currentSlideId, slideLocked: slideLocked === "true" });
     }
     if (action === "login") {
         const username = params.username.trim().toLowerCase();
         const data = sheet.getDataRange().getValues();
         let currentSlideId = scriptProps.getProperty("SLIDE_ID") || "";
-        for (let i = 1; i < data.length; i++) if (String(data[i][2]).toLowerCase() == username) return jsonResponse({ result: "success", userId: data[i][1], username: data[i][2], name: data[i][3], step: parseInt(data[i][4]), status: data[i][5], slideId: currentSlideId });
+        let slideLocked = scriptProps.getProperty("SLIDE_LOCKED") || "true";
+        for (let i = 1; i < data.length; i++) if (String(data[i][2]).toLowerCase() == username) return jsonResponse({ result: "success", userId: data[i][1], username: data[i][2], name: data[i][3], step: parseInt(data[i][4]), status: data[i][5], slideId: currentSlideId, slideLocked: slideLocked === "true" });
         return jsonResponse({ result: "error", message: "Username tidak ditemukan." });
     }
     if (action === "recover") {
@@ -148,7 +161,8 @@ function handleRequest(e) {
       const userId = params.userId;
       const data = sheet.getDataRange().getValues();
       let currentSlideId = scriptProps.getProperty("SLIDE_ID") || "";
-      for (let i = data.length - 1; i >= 0; i--) if (data[i][1] == userId) return jsonResponse({ result: "success", step: parseInt(data[i][4]), status: data[i][5], slideId: currentSlideId });
+      let slideLocked = scriptProps.getProperty("SLIDE_LOCKED") || "true";
+      for (let i = data.length - 1; i >= 0; i--) if (data[i][1] == userId) return jsonResponse({ result: "success", step: parseInt(data[i][4]), status: data[i][5], slideId: currentSlideId, slideLocked: slideLocked === "true" });
       return jsonResponse({ result: "error", message: "User not found" });
     }
     
@@ -331,6 +345,9 @@ export default function App() {
   const [slideReady, setSlideReady] = useState(false);
   const [slideError, setSlideError] = useState(false);
 
+  // --- STATE BARU UNTUK FITUR KUNCI SLIDE ---
+  const [slideLocked, setSlideLocked] = useState(true); // Default: terkunci
+
   const studentSlideRef = useRef(null);
   const instructorSlideRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -362,19 +379,25 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // PERBAIKAN: Fungsi getEmbedUrl - tanpa cache buster otomatis
+  // PERBAIKAN: Fungsi getEmbedUrl - TAMBAHKAN PARAMETER KUNCI SLIDE
   const getEmbedUrl = (docId, forceRefresh = false) => {
       if (!docId) return null;
       
       const safeId = docId;
       const baseUrlPrefix = safeId.startsWith('2PACX') ? '/d/e/' : '/d/';
       
-      // Parameter minimal - TANPA cache buster otomatis
+      // Parameter default
       const params = new URLSearchParams({
         start: 'false',
         loop: 'false',
         delayms: '60000'
       });
+      
+      // --- TAMBAHKAN PARAMETER UNTUK MENGUNCI SLIDE ---
+      // Parameter 'rm' dengan value 'minimal' akan menghilangkan kontrol navigasi
+      if (slideLocked) {
+        params.append('rm', 'minimal'); // Remove navigation controls
+      }
       
       // HANYA tambahkan cache buster jika diminta secara eksplisit
       if (forceRefresh) {
@@ -389,6 +412,39 @@ export default function App() {
     const newCacheKey = Date.now().toString().slice(-6);
     setSlideCacheKey(newCacheKey);
     showNotif("Presentation refreshed!");
+  };
+
+  // --- FUNGSI BARU UNTUK MENGUBAH STATUS KUNCI SLIDE ---
+  const toggleSlideLock = async () => {
+    setLoading(true);
+    try {
+      // Simpan status kunci ke server/database
+      const res = await callAPI({ 
+        action: 'setSlideLock', 
+        locked: !slideLocked 
+      });
+      
+      if (res && res.result === 'success') {
+        setSlideLocked(!slideLocked);
+        showNotif(`Slide ${!slideLocked ? 'terkunci' : 'dibuka'} untuk peserta`);
+        
+        // Refresh slide untuk menerapkan perubahan
+        refreshSlide();
+      }
+    } catch (error) {
+      showNotif("Gagal mengubah status kunci slide");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- FUNGSI UNTUK MENGAMBIL STATUS KUNCI DARI SERVER ---
+  const fetchSlideLockStatus = async () => {
+    const res = await callAPI({ action: 'getSlideLock' });
+    if (res && res.result === 'success') {
+      setSlideLocked(res.locked);
+      localStorage.setItem('slide_locked', res.locked);
+    }
   };
 
   const toggleFullScreen = async (ref) => {
@@ -418,6 +474,16 @@ export default function App() {
 
       if (params.action === 'saveMaterials') { localStorage.setItem('mock_materials', params.data); return { result: 'success' }; }
       if (params.action === 'getMaterials') { const stored = localStorage.getItem('mock_materials'); return { result: 'success', data: stored ? JSON.parse(stored) : null }; }
+
+      // --- TAMBAHKAN HANDLER UNTUK FITUR KUNCI SLIDE ---
+      if (params.action === 'setSlideLock') { 
+        localStorage.setItem('slide_locked', params.locked === 'true' || params.locked === true); 
+        return { result: 'success' }; 
+      }
+      if (params.action === 'getSlideLock') { 
+        const locked = localStorage.getItem('slide_locked') !== 'false'; 
+        return { result: 'success', locked: locked }; 
+      }
 
       if (params.action === 'auth_instructor') {
           const encodedPass = params.password; 
@@ -453,10 +519,17 @@ export default function App() {
           return { result: 'success' };
       }
       if (params.action === 'setSlideId') { localStorage.setItem('demo_slide_id', params.slideId); return { result: "success", slideId: params.slideId }; }
-      if (params.action === 'getStatus' || params.action === 'getAllUsers') {
-          return { result: "success", users: [{userId: 'd1', name: 'Demo User', username: 'demo', step: 1, status: 'PENDING', answer: 'Jawaban demo'}], slideId: DEFAULT_SLIDE_ID, step: 1, status: 'PENDING' };
+      if (params.action === 'getStatus' || params.action === 'getAllUsers' || params.action === 'login') {
+          const slideLocked = localStorage.getItem('slide_locked') !== 'false';
+          return { 
+            result: "success", 
+            users: [{userId: 'd1', name: 'Demo User', username: 'demo', step: 1, status: 'PENDING', answer: 'Jawaban demo'}], 
+            slideId: DEFAULT_SLIDE_ID, 
+            step: 1, 
+            status: 'PENDING',
+            slideLocked: slideLocked
+          };
       }
-      if (params.action === 'login') return { result: "success", userId: "DEMO_USER", username: "demo", name: "Siswa Demo", step: 1, status: "PENDING", slideId: DEFAULT_SLIDE_ID, answer: '' };
       if (params.action === 'request_revision') return { result: "success" };
       return { result: "success" };
   };
@@ -511,13 +584,22 @@ export default function App() {
       else { showNotif("Gagal menyimpan materi."); }
   };
 
-  // PERBAIKAN: useEffect awal
+  // PERBAIKAN: useEffect awal - TAMBAHKAN PEMUATAN STATUS KUNCI SLIDE
   useEffect(() => {
     const savedUser = localStorage.getItem('workshop_user');
     const savedSlideId = localStorage.getItem('workshop_slide_id');
+    const savedLocked = localStorage.getItem('slide_locked');
     
     // Set slide loading true di awal
     setSlideLoading(true);
+    
+    // Load status kunci slide
+    if (savedLocked !== null) {
+      setSlideLocked(savedLocked !== 'false');
+    } else {
+      // Default terkunci
+      setSlideLocked(true);
+    }
     
     if (savedUser) { 
       try { 
@@ -559,6 +641,11 @@ export default function App() {
           if (res && res.result === 'success' && res.slideId) {
             setCurrentSlideId(res.slideId);
             localStorage.setItem('workshop_slide_id', res.slideId);
+            // Ambil status kunci slide
+            if (res.slideLocked !== undefined) {
+              setSlideLocked(res.slideLocked);
+              localStorage.setItem('slide_locked', res.slideLocked);
+            }
             // Refresh slide untuk instruktur juga
             refreshSlide();
           }
@@ -603,6 +690,11 @@ export default function App() {
           if (slideRes && slideRes.result === 'success' && slideRes.slideId) {
             setCurrentSlideId(slideRes.slideId);
             localStorage.setItem('workshop_slide_id', slideRes.slideId);
+            // Ambil status kunci slide dari response
+            if (slideRes.slideLocked !== undefined) {
+              setSlideLocked(slideRes.slideLocked);
+              localStorage.setItem('slide_locked', slideRes.slideLocked);
+            }
             // Refresh slide setelah login
             refreshSlide();
           }
@@ -671,9 +763,16 @@ export default function App() {
         if (res.slideId) {
             setCurrentSlideId(res.slideId);
             localStorage.setItem('workshop_slide_id', res.slideId);
-            // Refresh slide saat login pertama kali
-            refreshSlide();
         }
+        
+        // SIMPAN STATUS KUNCI SLIDE DARI RESPONSE
+        if (res.slideLocked !== undefined) {
+          setSlideLocked(res.slideLocked);
+          localStorage.setItem('slide_locked', res.slideLocked);
+        }
+        
+        // Refresh slide saat login pertama kali
+        refreshSlide();
         
         fetchMaterials(); 
         localStorage.setItem('workshop_user', JSON.stringify(userObj)); 
@@ -696,6 +795,7 @@ export default function App() {
   const confirmLogout = () => {
       localStorage.removeItem('workshop_user'); 
       localStorage.removeItem('workshop_slide_id');
+      localStorage.removeItem('slide_locked');
       sessionStorage.removeItem('workshop_instructor_session');
       setActiveInstructorSession(null); 
       setUserData({ name: '', username: '', userId: '', step: 1, status: 'PENDING', answer: '' });
@@ -703,6 +803,7 @@ export default function App() {
       setCurrentSlideId(null);
       setSlideReady(false);
       setSlideLoading(true);
+      setSlideLocked(true); // Reset ke terkunci saat logout
       setSlideCacheKey(Date.now().toString().slice(-6)); // Reset cache key
       setView('auth'); 
       setShowLogoutConfirm(false); 
@@ -718,9 +819,10 @@ export default function App() {
       document.body.removeChild(textArea);
   };
 
-  // --- SYNC LOGIC OPTIMIZED untuk mencegah slide flicker ---
+  // --- PERBAIKAN UTAMA: SYNC LOGIC untuk sinkronisasi status kunci slide ---
   useEffect(() => {
     let interval;
+    
     if (view === 'student') {
       const poll = async () => {
           if (!userData.userId) return;
@@ -730,6 +832,7 @@ export default function App() {
               // Hanya update state jika ada perubahan nyata
               const stepChanged = res.step !== userData.step;
               const statusChanged = res.status !== userData.status;
+              const slideLockChanged = res.slideLocked !== slideLocked;
               
               if (stepChanged || statusChanged) {
                   setUserData(prev => ({ 
@@ -744,6 +847,19 @@ export default function App() {
                   }
               }
               
+              // PERBAIKAN: Update status kunci slide jika berubah
+              if (slideLockChanged) {
+                setSlideLocked(res.slideLocked);
+                localStorage.setItem('slide_locked', res.slideLocked);
+                refreshSlide(); // Refresh slide saat status kunci berubah
+                
+                if (res.slideLocked) {
+                  showNotif("Slide terkunci oleh instruktur");
+                } else {
+                  showNotif("Slide dibuka oleh instruktur");
+                }
+              }
+              
               // HANYA update slideId jika benar-benar berbeda
               if (res.slideId && res.slideId !== currentSlideId) {
                   setCurrentSlideId(res.slideId);
@@ -755,7 +871,7 @@ export default function App() {
           }
       };
       poll(); 
-      interval = setInterval(poll, 5000);
+      interval = setInterval(poll, 5000); // Polling setiap 5 detik
     }
     
     if (view === 'instructor_dashboard') {
@@ -775,6 +891,13 @@ export default function App() {
             }
           }
           
+          // PERBAIKAN: Update status kunci slide jika berubah
+          if (res.slideLocked !== undefined && res.slideLocked !== slideLocked) {
+            setSlideLocked(res.slideLocked);
+            localStorage.setItem('slide_locked', res.slideLocked);
+            refreshSlide(); // Refresh slide saat status kunci berubah
+          }
+          
           // HANYA update slideId jika benar-benar berbeda
           if (res.slideId && res.slideId !== currentSlideId) {
             setCurrentSlideId(res.slideId);
@@ -787,8 +910,9 @@ export default function App() {
       fetchInstr(); 
       interval = setInterval(fetchInstr, 8000);
     }
+    
     return () => clearInterval(interval);
-  }, [view, userData.userId, userData.step, userData.status, currentSlideId, instructorData]);
+  }, [view, userData.userId, userData.step, userData.status, currentSlideId, instructorData, slideLocked]); // Tambahkan slideLocked ke dependency
 
   const updateSlideIdConfig = async () => {
       if (!newSlideIdInput) return showNotif("Masukkan ID Slide");
@@ -1132,7 +1256,7 @@ export default function App() {
       );
   }
 
-  // INSTRUCTOR DASHBOARD VIEW dengan fitur revisi
+  // INSTRUCTOR DASHBOARD VIEW dengan fitur revisi dan fitur kunci slide
   if (view === 'instructor_dashboard') {
     return (
       <div className="min-h-screen bg-gray-50 font-sans pb-20" onContextMenu={(e) => e.preventDefault()}>
@@ -1397,9 +1521,26 @@ export default function App() {
               <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200"><Users size={24} /></div>
               <div><h1 className="font-extrabold text-lg text-gray-900 leading-tight">Dashboard Mengajar</h1><p className="text-xs text-indigo-600 font-medium bg-indigo-50 inline-block px-2 py-0.5 rounded mt-0.5">{activeInstructorSession?.name}</p></div>
           </div>
+          
+          {/* KONTROL SLIDE DENGAN FITUR KUNCI */}
           <div className="flex items-center gap-3 bg-gray-50 px-2 py-1.5 rounded-xl border border-gray-200 shadow-inner">
               <Monitor size={18} className="text-gray-400 ml-2"/>
               <div className="h-6 w-px bg-gray-300 mx-1"></div>
+              
+              {/* TOMBOL KUNCI SLIDE */}
+              <button 
+                  onClick={toggleSlideLock}
+                  className={`hover:bg-white p-2 rounded-lg transition shadow-sm flex items-center gap-1 ${
+                      slideLocked 
+                          ? 'bg-red-50 text-red-600 hover:text-red-700 border border-red-100' 
+                          : 'bg-green-50 text-green-600 hover:text-green-700 border border-green-100'
+                  }`}
+                  title={slideLocked ? "Slide terkunci - Klik untuk buka" : "Slide terbuka - Klik untuk kunci"}
+              >
+                  {slideLocked ? <Lock size={16}/> : <Unlock size={16}/>}
+                  <span className="text-xs font-bold hidden md:inline">{slideLocked ? 'Terkunci' : 'Terbuka'}</span>
+              </button>
+              
               <button onClick={() => { setNewSlideIdInput(currentSlideId); setShowSlideConfigModal(true); }} className="hover:bg-white p-2 rounded-lg text-gray-600 hover:text-indigo-600 transition shadow-sm" title="Ganti URL Slide"><Edit3 size={16}/></button>
               <button onClick={refreshSlide} className="hover:bg-white p-2 rounded-lg text-gray-600 hover:text-indigo-600 transition shadow-sm" title="Refresh Slide"><RefreshCw size={16}/></button>
           </div>
@@ -1416,8 +1557,10 @@ export default function App() {
         <main className="p-6 max-w-7xl mx-auto space-y-8">
           <div className="bg-white p-1 rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative">
             <div className="absolute top-4 left-4 z-10 flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                <span className="text-xs font-bold tracking-wide">LIVE PREVIEW</span>
+                <span className={`w-2 h-2 rounded-full ${slideLocked ? 'bg-red-500' : 'bg-green-500'} animate-pulse`}></span>
+                <span className="text-xs font-bold tracking-wide">
+                    {slideLocked ? 'SLIDE TERKUNCI' : 'SLIDE TERBUKA'}
+                </span>
             </div>
             <button onClick={() => toggleFullScreen(instructorSlideRef)} className="absolute bottom-4 right-4 z-10 bg-white/90 text-gray-800 p-2.5 rounded-xl hover:bg-indigo-600 hover:text-white backdrop-blur-md transition shadow-lg flex items-center gap-2 group" title="Layar Penuh">
                 {isExpanded ? <Minimize size={18}/> : <Maximize size={18}/>}
@@ -1596,7 +1739,7 @@ export default function App() {
     );
   }
 
-  // STUDENT VIEW dengan fitur revisi
+  // STUDENT VIEW dengan fitur revisi dan indikator kunci slide
   const currentStepData = materials.find(s => s.id === userData.step) || materials[materials.length - 1];
   const isFinished = userData.step > materials.length;
   const isApproved = userData.status === 'APPROVED';
@@ -1615,6 +1758,20 @@ export default function App() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"><div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4"><LogOut size={32} className="text-red-500"/></div><h3 className="text-xl font-bold text-gray-900 mb-2">Keluar Aplikasi?</h3><p className="text-sm text-gray-500 mb-6">Progres Anda akan disimpan secara otomatis.</p><div className="flex gap-3"><button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition">Batal</button><button onClick={confirmLogout} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-100 transition">Ya, Keluar</button></div></div></div>
       )}
       {notification && <div className="fixed top-4 right-4 bg-gray-900/90 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce backdrop-blur border border-gray-700 text-sm font-medium">{notification}</div>}
+      
+      {/* INDIKATOR KUNCI SLIDE UNTUK PESERTA */}
+      {slideLocked && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 bg-red-600 text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 animate-fade-in shadow-lg backdrop-blur-sm">
+            <Lock size={12}/>
+            <span>Slide terkunci oleh instruktur</span>
+        </div>
+      )}
+      {!slideLocked && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 bg-green-600 text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 animate-fade-in shadow-lg backdrop-blur-sm">
+            <Unlock size={12}/>
+            <span>Slide terbuka - Anda bisa navigasi</span>
+        </div>
+      )}
 
       {/* MOBILE NAV OVERLAY */}
       {mobileMenuOpen && (
